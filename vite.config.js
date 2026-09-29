@@ -30,7 +30,12 @@ export default defineConfig({
         background_color: '#0a0a0c',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: './',
+        // Absolutos y explícitos: evita que start_url resuelva a la raíz del
+        // origen (samosa13.github.io) y choque con otras apps (p.ej. VendIX).
+        // Deben coincidir con la subruta de GitHub Pages (/hypro/).
+        id: '/hypro/',
+        start_url: '/hypro/',
+        scope: '/hypro/',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
