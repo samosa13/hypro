@@ -61,6 +61,9 @@ export async function renderSettings(root, app) {
   ]));
 
   screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:20px' }, `${APP.name} v${'0.1.0'} · datos locales en tu dispositivo`));
+  // Atribución de iconos (requisito de la licencia CC BY 3.0 de game-icons).
+  screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:6px;font-size:11px' },
+    'Iconos: game-icons.github.io (CC BY 3.0), Tabler (MIT), Material Design Icons, Phosphor.'));
   root.appendChild(screen);
 
   async function exportData() {
