@@ -17,8 +17,9 @@ export const APP = {
   // Cambiar el nombre => ajustar aquí el corte de sílaba (índice donde empieza
   // la segunda sílaba). Para "Hypro" => "Hy" + "pro".
   logoSplitIndex: 2,
-  // Versión del esquema de datos (para migraciones futuras)
-  dataVersion: 1,
+  // Versión del esquema de datos (para migraciones futuras).
+  // v2: userId indexado en loggedSets + setCount en sessions (peer review).
+  dataVersion: 2,
   // Usuario local por defecto (multitenant-ready: mañana será el id real)
   defaultUserId: 'me',
 };

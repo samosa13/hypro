@@ -9,7 +9,21 @@ import { positionLabel } from '../../domain/effectiveWeek.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { initAudio, beepWarning, beepEnd, beepPR, vibrate } from '../sound.js';
 
+// Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
+// cancelarlo si el usuario navega fuera de Entrenar (peer review #9).
+let activeRestTimer = null;
+
+/** Cancela y limpia el cronómetro de descanso si hay uno activo. */
+export function cancelRestTimer() {
+  if (activeRestTimer) {
+    clearInterval(activeRestTimer.interval);
+    activeRestTimer.overlay?.remove();
+    activeRestTimer = null;
+  }
+}
+
 export async function renderTrain(root, app) {
+  cancelRestTimer(); // al (re)entrar, no dejar timers colgando
   clear(root);
   const screen = h('div', { class: 'screen' });
 
@@ -24,7 +38,10 @@ export async function renderTrain(root, app) {
   const pos = positionLabel(sessionsDone, plan.daysPerWeek);
   const days = await app.repo.listPlanDays(plan.id);
   const { dayInWeek } = await app.currentPosition(plan);
-  const todayDay = days.find((d) => d.order === dayInWeek) ?? days[0];
+  // Día que toca: indexar por posición ordenada, robusto ante `order` no
+  // contiguo tras editar/borrar días (peer review #6).
+  const ordered = [...days].sort((a, b) => a.order - b.order);
+  const todayDay = ordered.length ? ordered[(dayInWeek - 1) % ordered.length] : null;
 
   screen.appendChild(h('div', { class: 'banner' }, pos));
   screen.appendChild(h('div', { class: 'card row-between' }, [
@@ -69,10 +86,32 @@ async function renderActiveSession(root, app, ctx) {
     screen.appendChild(await exerciseCard(app, ctx, pe, ex));
   }
 
+  // Terminar: marca fin y descarta la sesión si quedó vacía (peer review #1).
   screen.appendChild(h('button', {
     class: 'btn', style: 'margin-top:8px',
-    onClick: async () => { await app.repo.finishSession(session.id); toast('¡Sesión guardada! 💪'); renderTrain(root, app); }
+    onClick: async () => {
+      cancelRestTimer();
+      const discarded = await app.repo.discardSessionIfEmpty(session.id);
+      if (!discarded) {
+        await app.repo.finishSession(session.id);
+        toast('¡Sesión guardada! 💪');
+      } else {
+        toast('Sesión vacía descartada');
+      }
+      renderTrain(root, app);
+    }
   }, '✓ Terminar sesión'));
+
+  // Cancelar/salir sin registrar: descarta la sesión fantasma.
+  screen.appendChild(h('button', {
+    class: 'btn btn-ghost', style: 'margin-top:8px',
+    onClick: async () => {
+      cancelRestTimer();
+      await app.repo.discardSessionIfEmpty(session.id);
+      renderTrain(root, app);
+    }
+  }, 'Salir sin guardar'));
+
   root.appendChild(screen);
 }
 
@@ -97,15 +136,14 @@ async function exerciseCard(app, ctx, pe, ex) {
   // Filas de series (targetSets)
   const setsWrap = h('div', { style: 'margin-top:10px' });
   const nSets = pe.targetSets || 3;
-  let restTimerHandle = { last: null };
   for (let i = 1; i <= nSets; i++) {
-    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, restTimerHandle));
+    setsWrap.appendChild(setRow(app, ctx, pe, ex, i));
   }
   card.appendChild(setsWrap);
   return card;
 }
 
-function setRow(app, ctx, pe, ex, setNumber, restHandle) {
+function setRow(app, ctx, pe, ex, setNumber) {
   const weight = h('input', { type: 'number', min: '0', step: '0.5', value: String(pe.targetWeight ?? 0), style: 'width:80px' });
   const reps = h('input', { type: 'number', min: '0', value: String(pe.targetReps ?? 0), style: 'width:70px' });
   const row = h('div', { class: 'set-row' });
@@ -122,14 +160,10 @@ function setRow(app, ctx, pe, ex, setNumber, restHandle) {
     const r = parseInt(reps.value) || 0;
     if (w <= 0 || r <= 0) { toast('Pon peso y reps'); return; }
 
-    // descanso real desde la serie anterior de este ejercicio
-    let restTaken = null;
-    const now = Date.now();
-    if (restHandle.last) restTaken = Math.round((now - restHandle.last) / 1000);
-    restHandle.last = now;
-
+    // El descanso real lo calcula appService desde el loggedAt de la última
+    // serie persistida (peer review #10): medida estable, sin estado en la vista.
     const { isPR } = await app.logSet({
-      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r, restTakenSeconds: restTaken,
+      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r,
     });
 
     row.classList.add('done');
@@ -150,8 +184,7 @@ async function startRestTimer(app, seconds) {
   const lead = settings.beepLeadSeconds ?? 10;
   const soundOn = settings.soundEnabled !== false;
 
-  const existing = document.querySelector('.rest-overlay');
-  if (existing) existing.remove();
+  cancelRestTimer(); // no solapar timers
 
   let remaining = seconds;
   const num = h('div', { class: 'timer-num' }, String(remaining));
@@ -177,14 +210,16 @@ async function startRestTimer(app, seconds) {
     if (remaining <= 0) { finish(); }
   }, 1000);
 
+  // Registrar el timer activo para poder cancelarlo al navegar (peer review #9).
+  activeRestTimer = { interval, overlay };
+
   function finish() {
-    clearInterval(interval);
+    cancelRestTimer();
     if (soundOn) beepEnd();
     vibrate([120, 60, 120]);
-    overlay.remove();
     toast('¡A por la siguiente serie!');
   }
-  function stop() { clearInterval(interval); overlay.remove(); }
+  function stop() { cancelRestTimer(); }
 }
 
 /** Celebración visual de récord (RF-26). */

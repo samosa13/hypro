@@ -12,7 +12,7 @@ import { icon } from './ui/icons.js';
 import { ensureNotificationPermission, showLocalNotification, registerPeriodicBackup } from './ui/notifications.js';
 import { setupInstallBanner, setupUpdateBanner } from './ui/pwaInstall.js';
 
-import { renderTrain } from './ui/screens/trainScreen.js';
+import { renderTrain, cancelRestTimer } from './ui/screens/trainScreen.js';
 import { renderPlan } from './ui/screens/planScreen.js';
 import { renderExercises } from './ui/screens/exercisesScreen.js';
 import { renderProgress } from './ui/screens/progressScreen.js';
@@ -67,6 +67,7 @@ function renderChrome() {
 }
 
 async function navigate(tabId) {
+  cancelRestTimer(); // cancelar cronómetro de descanso al cambiar de pantalla (#9)
   current = tabId;
   renderChrome();
   const tab = TABS.find((t) => t.id === tabId);
@@ -76,7 +77,7 @@ async function navigate(tabId) {
 
 async function showOpeningMessage() {
   const settings = await app.repo.getSettings(app.userId);
-  const sessions = await app.repo.listSessions(app.userId);
+  const sessions = await app.repo.listValidSessions(app.userId); // solo sesiones reales (#13)
 
   // Aviso por inactividad (RF-41)
   if (sessions.length > 0) {

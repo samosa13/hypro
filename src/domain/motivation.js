@@ -30,9 +30,11 @@ const COMEBACK = [
  * @returns {string}
  */
 export function dailyQuote(now = new Date()) {
-  const dayOfYear = Math.floor(
-    (now - new Date(now.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24)
-  );
+  // Día del año normalizado con Date.UTC sobre componentes locales, para que no
+  // salte/repita en la frontera del día ni con el cambio de horario (#12).
+  const startOfYear = Date.UTC(now.getFullYear(), 0, 0);
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayOfYear = Math.floor((today - startOfYear) / (1000 * 60 * 60 * 24));
   return DAILY[dayOfYear % DAILY.length];
 }
 

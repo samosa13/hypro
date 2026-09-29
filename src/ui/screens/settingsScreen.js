@@ -39,7 +39,9 @@ export async function renderSettings(root, app) {
           inactivityThresholdDays: parseInt(inactivity.value) || 4,
           soundEnabled: sound.checked,
           trainsAtNight: night.checked,
-          gymStartDate: gymStart.value ? new Date(gymStart.value).toISOString() : s.gymStartDate,
+          // El <input type=date> da "YYYY-MM-DD"; lo interpretamos como fecha
+          // LOCAL (no UTC) para que no se desfase un día en husos al oeste (#12).
+          gymStartDate: gymStart.value ? localDateToISO(gymStart.value) : s.gymStartDate,
         }, app.userId);
         toast('Ajustes guardados');
       }
@@ -84,11 +86,21 @@ export async function renderSettings(root, app) {
     try {
       const text = await f.text();
       const data = JSON.parse(text);
-      await app.repo.importAll(data);
+      const res = await app.repo.importAll(data, app.userId);
+      if (res && res.ok === false) {
+        toast(res.reason || 'Backup no válido');
+        return;
+      }
       toast('Datos restaurados');
       renderSettings(root, app);
     } catch (e) {
       toast('Fichero no válido');
     }
   }
+}
+
+/** Convierte "YYYY-MM-DD" (input date) a ISO tratándolo como medianoche LOCAL. */
+function localDateToISO(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d).toISOString();
 }

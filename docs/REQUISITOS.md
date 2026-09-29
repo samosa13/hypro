@@ -98,8 +98,17 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 - Se evalúa por ejercicio en el momento de registrar la serie.
 - Criterio principal: **1RM estimado** (fórmula de Epley: `peso × (1 + reps/30)`),
   para comparar objetivamente series con distinto peso/reps.
-- Si el 1RM estimado de la serie supera el mejor previo, es PR → celebración +
+- Si el 1RM estimado de la serie **supera** el mejor previo, es PR → celebración +
   se actualiza `personalRecords` con la fecha.
+- **Política de empate:** si el 1RM estimado **iguala** exactamente el récord
+  vigente, NO es récord nuevo (sin celebración), pero SÍ se **refresca la fecha**
+  del récord (volver a alcanzar tu mejor marca mantiene su fecha reciente).
+
+### RB-6 · Sesión válida (criterio único)
+- Una sesión cuenta como día entrenado **solo si tiene al menos una serie
+  registrada** (`setCount > 0`). Las sesiones "fantasma" (se pulsó Empezar y no
+  se registró nada) NO cuentan para semana efectiva, racha ni contadores, y se
+  descartan al salir. Este criterio es único en toda la app.
 
 ### RB-3 · Racha inteligente
 - El plan define días de entrenamiento y, por diferencia, días de descanso esperados.
@@ -108,10 +117,13 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 - Descansar los días previstos **no** rompe la racha.
 
 ### RB-4 · Aviso de estancamiento
-- Al cerrar una semana efectiva, por cada ejercicio entrenado se compara el mejor
-  1RM estimado de la semana con el PR vigente.
-- Si no se igualó ni superó, se marca "sin progreso esta semana" indicando la fecha
-  del PR vigente.
+- Se evalúa la **última semana efectiva COMPLETADA** (no la semana en curso): no
+  tiene sentido avisar de estancamiento a media semana.
+- Por cada ejercicio entrenado esa semana se compara su mejor 1RM estimado con el
+  mejor 1RM **histórico ANTERIOR a esa semana** (no con el PR vigente, que ya
+  incluiría lo batido durante la propia semana).
+- Si no se superó ese máximo previo, se marca "sin progreso esta semana" indicando
+  la fecha del récord anterior.
 
 ### RB-5 · Frase motivadora / entreno nocturno
 - Si `trainsAtNight = true`, la frase diaria se muestra en la primera apertura de la

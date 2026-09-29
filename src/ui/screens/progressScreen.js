@@ -17,7 +17,7 @@ export async function renderProgress(root, app) {
   const settings = await app.repo.getSettings(app.userId);
   const plan = await app.repo.getActivePlan(app.userId);
   const summary = await app.progressSummary();
-  const sessions = await app.repo.listSessions(app.userId);
+  const sessions = await app.repo.listValidSessions(app.userId); // solo sesiones reales (#13)
   const prs = await app.repo.listPRs(app.userId);
   const allEx = await app.repo.listExercises(app.userId);
   const exMap = Object.fromEntries(allEx.map((e) => [e.id, e]));

@@ -2,7 +2,7 @@
  * Tests unitarios de dominio (PLAN_TESTS §2). Puros, sin UI ni IndexedDB.
  */
 import { describe, it, expect } from 'vitest';
-import { estimate1RM, isNewPR, buildPR } from '../src/domain/personalRecord.js';
+import { estimate1RM, isNewPR, isTiePR, buildPR } from '../src/domain/personalRecord.js';
 import { currentPosition, positionLabel, positionForNewSession } from '../src/domain/effectiveWeek.js';
 import { tenureSince, tenureLabel } from '../src/domain/gymTenure.js';
 import { currentStreak, maxGapDays } from '../src/domain/streak.js';
@@ -41,6 +41,16 @@ describe('personalRecord · 1RM y PR', () => {
     const pr = buildPR({ exerciseId: 'e1', weight: 50, reps: 5, loggedAt: '2026-09-14T20:00:00Z' }, 'me');
     expect(pr.achievedAt).toBe('2026-09-14T20:00:00Z');
     expect(pr.bestWeight).toBe(50);
+  });
+
+  it('UT-PR-07 · isTiePR detecta empate exacto de 1RM', () => {
+    const pr = buildPR({ exerciseId: 'e1', weight: 40, reps: 10, loggedAt: '2026-09-14' }, 'me');
+    // misma serie => empate
+    expect(isTiePR({ weight: 40, reps: 10 }, pr)).toBe(true);
+    // superar no es empate
+    expect(isTiePR({ weight: 45, reps: 10 }, pr)).toBe(false);
+    // sin PR previo no hay empate
+    expect(isTiePR({ weight: 40, reps: 10 }, null)).toBe(false);
   });
 });
 

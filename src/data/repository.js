@@ -87,22 +87,44 @@ export const repository = {
   },
 
   // ---------- Sesiones ----------
+  // CRITERIO ÚNICO de "sesión válida" (peer review #1/#13): una sesión cuenta
+  // como día entrenado solo si tiene al menos una serie registrada (setCount>0).
+  // Las sesiones "fantasma" (se pulsó Empezar y no se registró nada) NO cuentan
+  // para semana efectiva, racha ni contadores.
   async countSessions(planId) {
-    return db.sessions.where('planId').equals(planId).count();
+    // Solo sesiones válidas (con series) de este plan.
+    return db.sessions.where('planId').equals(planId).filter((s) => (s.setCount ?? 0) > 0).count();
   },
   async countAllSessions(userId = APP.defaultUserId) {
-    return db.sessions.where('userId').equals(userId).count();
+    return db.sessions.where('userId').equals(userId).filter((s) => (s.setCount ?? 0) > 0).count();
   },
+  /** Todas las sesiones del usuario (incluye fantasma; filtrar con validSessions). */
   async listSessions(userId = APP.defaultUserId) {
     return db.sessions.where('userId').equals(userId).toArray();
   },
+  /** Solo sesiones válidas (con al menos una serie). */
+  async listValidSessions(userId = APP.defaultUserId) {
+    return db.sessions.where('userId').equals(userId).filter((s) => (s.setCount ?? 0) > 0).toArray();
+  },
   async startSession(session, userId = APP.defaultUserId) {
-    const record = { id: uid(), userId, startedAt: new Date().toISOString(), finishedAt: null, ...session };
+    const record = { id: uid(), userId, startedAt: new Date().toISOString(), finishedAt: null, setCount: 0, ...session };
     await db.sessions.put(record);
     return record;
   },
   async finishSession(sessionId) {
     await db.sessions.update(sessionId, { finishedAt: new Date().toISOString() });
+  },
+  /**
+   * Elimina una sesión fantasma (sin series). Se usa al salir de Entrenar sin
+   * haber registrado nada, para no dejar basura en la tabla.
+   */
+  async discardSessionIfEmpty(sessionId) {
+    const s = await db.sessions.get(sessionId);
+    if (s && (s.setCount ?? 0) === 0) {
+      await db.sessions.delete(sessionId);
+      return true;
+    }
+    return false;
   },
 
   // ---------- Series registradas ----------
@@ -113,15 +135,29 @@ export const repository = {
     return db.loggedSets.where('exerciseId').equals(exerciseId).toArray();
   },
   async countAllSets(userId = APP.defaultUserId) {
-    // loggedSets no lleva userId directo; contamos por sesiones del usuario.
-    const sessions = await db.sessions.where('userId').equals(userId).toArray();
-    const ids = new Set(sessions.map((s) => s.id));
-    const all = await db.loggedSets.toArray();
-    return all.filter((s) => ids.has(s.sessionId)).length;
+    // loggedSets ahora lleva userId indexado (v2): conteo directo y eficiente.
+    return db.loggedSets.where('userId').equals(userId).count();
+  },
+  /** Última serie registrada de una sesión (para medir descanso real estable). */
+  async lastSetOfSession(sessionId) {
+    const sets = await db.loggedSets.where('sessionId').equals(sessionId).toArray();
+    if (sets.length === 0) return null;
+    return sets.sort((a, b) => new Date(b.loggedAt) - new Date(a.loggedAt))[0];
   },
   async logSet(set) {
-    const record = { id: uid(), loggedAt: new Date().toISOString(), isPR: false, ...set };
-    await db.loggedSets.put(record);
+    const record = {
+      id: uid(),
+      userId: set.userId ?? APP.defaultUserId,
+      loggedAt: new Date().toISOString(),
+      isPR: false,
+      ...set,
+    };
+    await db.transaction('rw', db.loggedSets, db.sessions, async () => {
+      await db.loggedSets.put(record);
+      // Incrementa el contador de series de la sesión (criterio de validez).
+      const s = await db.sessions.get(record.sessionId);
+      if (s) await db.sessions.update(record.sessionId, { setCount: (s.setCount ?? 0) + 1 });
+    });
     return record;
   },
 
@@ -184,7 +220,46 @@ export const repository = {
     await db.backups.put(record);
     return record;
   },
-  async importAll(data) {
+  /**
+   * Valida que `data` parece un backup de Hypro antes de tocar nada.
+   * Devuelve { ok, reason }. NO lanza. (peer review #4)
+   */
+  validateBackup(data) {
+    if (!data || typeof data !== 'object') return { ok: false, reason: 'El fichero no es un backup válido.' };
+    if (!data.meta || data.meta.app !== APP.name) {
+      return { ok: false, reason: 'El fichero no es un backup de Hypro.' };
+    }
+    if (typeof data.meta.dataVersion !== 'number' || data.meta.dataVersion > APP.dataVersion) {
+      return { ok: false, reason: 'El backup es de una versión más nueva y no es compatible.' };
+    }
+    // Las tablas presentes deben ser arrays.
+    const tables = ['exercises', 'plans', 'planDays', 'planExercises', 'sessions', 'loggedSets', 'personalRecords', 'settings'];
+    for (const t of tables) {
+      if (data[t] !== undefined && !Array.isArray(data[t])) {
+        return { ok: false, reason: `El backup está corrupto (tabla ${t}).` };
+      }
+    }
+    return { ok: true };
+  },
+
+  /**
+   * Restaura un backup de forma SEGURA (peer review #4):
+   *  1. Valida el contenido; si no es válido, no toca nada y devuelve error.
+   *  2. Hace un backup automático del estado actual (red de seguridad).
+   *  3. Reemplaza los datos dentro de una transacción.
+   * @returns {Promise<{ok:boolean, reason?:string}>}
+   */
+  async importAll(data, userId = APP.defaultUserId) {
+    const check = this.validateBackup(data);
+    if (!check.ok) return check;
+
+    // Red de seguridad: backup del estado actual antes de destruir.
+    try {
+      await this.saveBackup('pre-import-' + new Date().toISOString(), userId);
+    } catch {
+      /* si falla el backup previo, seguimos: el usuario pidió importar */
+    }
+
     await db.transaction(
       'rw',
       [db.exercises, db.plans, db.planDays, db.planExercises, db.sessions, db.loggedSets, db.personalRecords, db.settings],
@@ -203,6 +278,7 @@ export const repository = {
         if (data.settings) await db.settings.bulkPut(data.settings);
       }
     );
+    return { ok: true };
   },
 };
 
