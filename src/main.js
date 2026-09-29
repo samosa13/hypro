@@ -29,11 +29,11 @@ const app = createAppService();
 const root = document.getElementById('app');
 
 const TABS = [
-  { id: 'train', label: 'Entrenar', icon: 'pushHorizontal', render: renderTrain },
-  { id: 'plan', label: 'Plan', icon: 'squat', render: renderPlan },
-  { id: 'exercises', label: 'Ejercicios', icon: 'dumbbell', render: renderExercises },
-  { id: 'progress', label: 'Progreso', icon: 'pull', render: renderProgress },
-  { id: 'settings', label: 'Ajustes', icon: 'machine', render: renderSettings },
+  { id: 'train', label: 'Entrenar', icon: 'ex_press_banca_barra', render: renderTrain },
+  { id: 'plan', label: 'Plan', icon: 'ex_sentadilla', render: renderPlan },
+  { id: 'exercises', label: 'Ejercicios', icon: 'ex_curl_db', render: renderExercises },
+  { id: 'progress', label: 'Progreso', icon: 'ex_dominadas', render: renderProgress },
+  { id: 'settings', label: 'Ajustes', icon: 'ex_press_maquina', render: renderSettings },
 ];
 
 let current = 'train';

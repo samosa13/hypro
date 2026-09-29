@@ -26,6 +26,11 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
           id: uid(), userId, isCustom: false, createdAt: new Date().toISOString(), ...e,
         }));
         await repo.bulkAddExercises(seeded);
+      } else {
+        // Migración de iconos: si el catálogo cambió las claves de icono, se
+        // reconcilian por nombre para los ejercicios semilla (no custom). Así el
+        // usuario ve los pictogramas nuevos sin borrar sus datos.
+        await this.reconcileSeedIcons();
       }
       const settings = await repo.getSettings(userId);
       // Fija fechas de inicio la primera vez.
@@ -35,6 +40,25 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       if (Object.keys(patch).length) await repo.saveSettings({ ...settings, ...patch }, userId);
       await this.ensureDailyBackup();
       return repo.getSettings(userId);
+    },
+
+    /**
+     * Reconcilia los iconos de los ejercicios semilla (no custom) con el
+     * catálogo actual, emparejando por nombre. Solo actualiza si el icono
+     * cambió, y nunca toca ejercicios creados por el usuario (isCustom).
+     */
+    async reconcileSeedIcons() {
+      const existing = await repo.listExercises(userId);
+      const byName = Object.fromEntries(SEED_EXERCISES.map((s) => [s.name, s.icon]));
+      const toUpdate = [];
+      for (const ex of existing) {
+        if (ex.isCustom) continue;
+        const wantedIcon = byName[ex.name];
+        if (wantedIcon && wantedIcon !== ex.icon) {
+          toUpdate.push({ ...ex, icon: wantedIcon });
+        }
+      }
+      if (toUpdate.length) await repo.bulkAddExercises(toUpdate);
     },
 
     /** Backup diario: si hoy no hay backup, lo crea (RF-50). */
