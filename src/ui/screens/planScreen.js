@@ -6,6 +6,13 @@ import { h, clear, toast, confirmDialog } from '../dom.js';
 import { icon } from '../icons.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
+import { deriveRepRange, normalizeRepRange } from '../../domain/progression.js';
+
+/** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
+function repRangeLabel(pe) {
+  const r = pe.repMin > 0 && pe.repMax > 0 ? { min: pe.repMin, max: pe.repMax } : deriveRepRange(pe.targetReps);
+  return r.min === r.max ? String(r.min) : `${r.min}-${r.max}`;
+}
 
 export async function renderPlan(root, app, opts = {}) {
   clear(root);
@@ -137,7 +144,7 @@ async function openEditDay(root, app, plan, day) {
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
           h('div', {}, [
             h('div', { style: 'font-weight:700' }, ex.name),
-            h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: pe.targetReps, weight: pe.targetWeight, rest: pe.restSeconds })),
+            h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: repRangeLabel(pe), weight: pe.targetWeight, rest: pe.restSeconds })),
           ]),
         ]),
         h('button', {
@@ -160,7 +167,8 @@ async function openEditDay(root, app, plan, day) {
     ...allExercises.sort((a, b) => a.name.localeCompare(b.name)).map((e) => h('option', { value: e.id }, e.name)),
   ]);
   const sets = h('input', { type: 'number', min: '1', value: String(settings.defaultSets) });
-  const reps = h('input', { type: 'number', min: '1', value: '10' });
+  const repMin = h('input', { type: 'number', min: '1', value: '8' });
+  const repMax = h('input', { type: 'number', min: '1', value: '12' });
   const weight = h('input', { type: 'number', min: '0', step: '0.5', value: '20' });
   const rest = h('input', { type: 'number', min: '0', value: String(settings.defaultRestSeconds) });
 
@@ -168,21 +176,32 @@ async function openEditDay(root, app, plan, day) {
     h('label', {}, t('plan.addExercise')), picker,
     h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.sets')), sets]),
-      h('div', {}, [h('label', {}, t('plan.targetReps')), reps]),
-    ]),
-    h('div', { class: 'grid2' }, [
       h('div', {}, [h('label', {}, t('plan.weightKg')), weight]),
+    ]),
+    h('label', { style: 'margin-top:8px' }, t('plan.repRange')),
+    h('div', { class: 'grid2' }, [
+      h('div', {}, [h('label', { class: 'muted' }, t('plan.repMin')), repMin]),
+      h('div', {}, [h('label', { class: 'muted' }, t('plan.repMax')), repMax]),
+    ]),
+    h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')),
+    h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.restSec')), rest]),
+      h('div', {}),
     ]),
     h('button', {
       class: 'btn btn-sm', style: 'margin-top:12px',
       onClick: async () => {
         if (!picker.value) { toast(t('plan.pickOne')); return; }
         const existing = await app.repo.listPlanExercises(day.id);
+        // Rango normalizado (min>=1, max>=min). targetReps = centro del rango,
+        // que sigue alimentando autorrelleno y objetivo sin historial.
+        const range = normalizeRepRange(repMin.value, repMax.value);
         await app.repo.savePlanExercise({
           planDayId: day.id, exerciseId: picker.value, order: existing.length + 1,
           targetSets: parseInt(sets.value) || settings.defaultSets,
-          targetReps: parseInt(reps.value) || 10,
+          repMin: range.min,
+          repMax: range.max,
+          targetReps: Math.round((range.min + range.max) / 2),
           targetWeight: parseFloat(weight.value) || 0,
           restSeconds: parseInt(rest.value) || settings.defaultRestSeconds,
         });

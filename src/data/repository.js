@@ -85,6 +85,23 @@ export const repository = {
   async deletePlanExercise(id) {
     await db.planExercises.delete(id);
   },
+  /**
+   * Todos los planExercises del usuario. planExercises no lleva userId (cuelga
+   * de planDay → plan), así que se resuelve la propiedad por sus planes. Se usa
+   * en la migración de rangos de reps (repMin/repMax).
+   */
+  async listAllPlanExercises(userId = APP.defaultUserId) {
+    const plans = await db.plans.where('userId').equals(userId).toArray();
+    const planIds = new Set(plans.map((p) => p.id));
+    const days = await db.planDays.toArray();
+    const dayIds = new Set(days.filter((d) => planIds.has(d.planId)).map((d) => d.id));
+    const all = await db.planExercises.toArray();
+    return all.filter((pe) => dayIds.has(pe.planDayId));
+  },
+  /** Actualiza planExercises en lote (campos libres, sin cambio de esquema). */
+  async bulkPutPlanExercises(items) {
+    await db.planExercises.bulkPut(items);
+  },
 
   // ---------- Sesiones ----------
   // CRITERIO ÚNICO de "sesión válida" (peer review #1/#13): una sesión cuenta

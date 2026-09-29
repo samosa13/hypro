@@ -48,6 +48,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         // usuario ve los pictogramas nuevos sin borrar sus datos.
         await this.reconcileSeedIcons();
       }
+      // Migración de rangos de reps: los planes antiguos solo tenían un nº de
+      // reps objetivo (targetReps). Se les deriva un rango [repMin, repMax] para
+      // que la progresión respete a quien entrena fuera del 8-12. No destructivo.
+      await this.reconcilePlanExerciseRanges();
       const settings = await repo.getSettings(userId);
       // Fija fechas de inicio la primera vez.
       const patch = {};
@@ -79,6 +83,27 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         if (Object.keys(patch).length) toUpdate.push({ ...ex, ...patch });
       }
       if (toUpdate.length) await repo.bulkAddExercises(toUpdate);
+    },
+
+    /**
+     * Rellena repMin/repMax en los planExercises que aún no los tengan,
+     * derivándolos de su targetReps (rango centrado ±2). Migración no destructiva:
+     * no toca los que ya tengan rango ni ningún otro campo. Idempotente.
+     */
+    async reconcilePlanExerciseRanges() {
+      // Short-circuit barato: sin planes no hay nada que migrar (evita cargar
+      // planDays/planExercises en cada arranque una vez el usuario aún no tiene plan).
+      const plans = await repo.listPlans(userId);
+      if (plans.length === 0) return;
+      const { deriveRepRange } = await import('./progression.js');
+      const all = await repo.listAllPlanExercises(userId);
+      const toUpdate = [];
+      for (const pe of all) {
+        if (pe.repMin > 0 && pe.repMax > 0) continue; // ya migrado
+        const { min, max } = deriveRepRange(pe.targetReps);
+        toUpdate.push({ ...pe, repMin: min, repMax: max });
+      }
+      if (toUpdate.length) await repo.bulkPutPlanExercises(toUpdate);
     },
 
     /** Backup diario: si hoy no hay backup, lo crea (RF-50). */
@@ -242,10 +267,17 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async suggestionFor(exercise, planExercise, excludeSessionId = null) {
       const last = await this.lastPerformance(exercise.id, excludeSessionId);
-      const { suggestNext } = await import('./progression.js');
+      const { suggestNext, deriveRepRange } = await import('./progression.js');
+      // Rango objetivo del ejercicio. Si el plan es antiguo y aún no tiene rango
+      // (migración no aplicada todavía), se deriva al vuelo del targetReps.
+      const repRange =
+        planExercise?.repMin > 0 && planExercise?.repMax > 0
+          ? { min: planExercise.repMin, max: planExercise.repMax }
+          : deriveRepRange(planExercise?.targetReps);
       return suggestNext({
         lastBest: last ? { weight: last.weight, reps: last.reps } : null,
         target: { targetReps: planExercise?.targetReps, targetWeight: planExercise?.targetWeight },
+        repRange,
         equipment: exercise.equipment,
       });
     },

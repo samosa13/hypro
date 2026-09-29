@@ -81,12 +81,16 @@ export default {
   'plan.pickExercise': 'Selecciona un ejercicio…',
   'plan.sets': 'Series',
   'plan.targetReps': 'Reps objetivo',
+  'plan.repRange': 'Rango de reps',
+  'plan.repMin': 'Reps mín.',
+  'plan.repMax': 'Reps máx.',
+  'plan.repRangeHint': 'La progresión sube reps dentro de este rango; al llegar al máximo, sube el peso.',
   'plan.weightKg': 'Peso (kg)',
   'plan.restSec': 'Descanso (s)',
   'plan.addToDay': '+ Añadir al día',
   'plan.pickOne': 'Elige un ejercicio',
   'plan.removeExercise': '¿Quitar "{name}" de este día?',
-  'plan.exerciseMeta': '{sets}×{reps} · {weight}kg · {rest}s',
+  'plan.exerciseMeta': '{sets}×{reps} reps · {weight}kg · {rest}s',
 
   // --- Ejercicios ---
   'ex.title': 'Ejercicios',

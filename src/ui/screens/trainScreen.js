@@ -10,6 +10,18 @@ import { formatDate } from '../../domain/dateKey.js';
 import { initAudio, beepWarning, beepEnd, beepPR, vibrate } from '../sound.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
+import { deriveRepRange } from '../../domain/progression.js';
+
+/**
+ * Reps objetivo de un plan-ejercicio ACOTADAS a su rango. Si el plan es antiguo
+ * y aún no tiene rango, se deriva del targetReps. Evita prefijar un valor fuera
+ * del rango configurado (p.ej. targetReps=12 heredado con rango 6-8).
+ */
+function targetRepsInRange(pe) {
+  const r = pe.repMin > 0 && pe.repMax > 0 ? { min: pe.repMin, max: pe.repMax } : deriveRepRange(pe.targetReps);
+  const target = pe.targetReps ?? r.min;
+  return Math.min(r.max, Math.max(r.min, target));
+}
 
 // Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
 // cancelarlo si el usuario navega fuera de Entrenar (peer review #9).
@@ -149,8 +161,10 @@ async function exerciseCard(app, ctx, pe, ex) {
   ]));
 
   // Valores por defecto de las series: lo de la última vez, si no el objetivo (#2).
+  // Sin historial, las reps objetivo se acotan al rango configurado del ejercicio
+  // para no prefijar un valor fuera de rango (dato antiguo sin curar).
   const prefillWeight = last ? last.weight : (pe.targetWeight ?? 0);
-  const prefillReps = last ? last.reps : (pe.targetReps ?? 0);
+  const prefillReps = last ? last.reps : targetRepsInRange(pe);
 
   // Filas de series (targetSets). Comparten un "estado previo" para el botón repetir (#3).
   const setsWrap = h('div', { style: 'margin-top:10px' });

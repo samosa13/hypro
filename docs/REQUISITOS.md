@@ -51,7 +51,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-32 | 2 | La app avisa cuando en una semana **no se ha superado/igualado el récord** de un ejercicio, indicando la fecha del récord vigente. |
 | RF-33 | 2 | **Racha inteligente** que respeta los días de descanso del plan. |
 | RF-34 | 2 | **Gráficas sencillas**: evolución de peso/reps por ejercicio, asistencia (faltas), descansos reales entre series y entre días. |
-| RF-35 | 2 | **Sugerencia de progresión** (coach ligero): antes de cada ejercicio, propone el objetivo de hoy por doble progresión (subir reps hasta el tope del rango y luego peso). No obliga, solo sugiere. |
+| RF-35 | 2 | **Sugerencia de progresión** (coach ligero): antes de cada ejercicio, propone el objetivo de hoy por doble progresión (subir reps hasta el tope del **rango configurable por ejercicio** y luego peso). No obliga, solo sugiere. |
 | RF-36 | 2 | **Autorrelleno de series**: cada serie se precarga con lo hecho la última vez en ese ejercicio (fallback al objetivo del plan). |
 | RF-37 | 2 | **Repetir última serie**: botón para copiar el peso×reps de la última serie confirmada a otra serie. |
 | RF-38 | 2 | **Volumen semanal por grupo muscular**: nº de series por músculo en la semana en curso (métrica clave de hipertrofia). |
@@ -131,13 +131,19 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
   la fecha del récord anterior.
 
 ### RB-7 · Sugerencia de progresión (doble progresión)
+- **Rango de reps configurable por ejercicio** (`repMin`/`repMax` en cada plan-ejercicio).
+  Respeta a quien entrena en cualquier rango: fuerza (p. ej. 4-6), hipertrofia (8-12),
+  resistencia (12-15). Ya no se asume un 8-12 fijo para todos.
 - Se basa en la mejor serie (por 1RM) de la última sesión en que se hizo el ejercicio.
-- Si las reps de esa serie están por debajo del tope del rango (por defecto 8-12),
+- Si las reps de esa serie están **por debajo del tope del rango configurado**,
   se sugiere **+1 repetición** al mismo peso.
 - Si se alcanzó el tope de reps, se sugiere **subir el peso** al siguiente incremento
   realista (mancuerna 2 kg, barra/máquina 2,5 kg; pesos <20 kg suben de 1,25) y
-  reiniciar las reps al mínimo del rango.
-- Sin historial, se sugiere el objetivo del plan. Es una sugerencia, no una imposición.
+  reiniciar las reps al **mínimo del rango**.
+- Sin historial, se sugiere el objetivo del plan **acotado al rango** (nunca por encima
+  del máximo, aunque el `targetReps` heredado fuera mayor). Es una sugerencia, no una imposición.
+- **Migración no destructiva**: los planes antiguos (que solo tenían `targetReps`) reciben
+  un rango derivado (centrado ±2, mínimo acotado a 1) al arrancar, sin tocar sus datos.
 
 ### RB-5 · Frase motivadora / entreno nocturno
 - Si `trainsAtNight = true`, la frase diaria se muestra en la primera apertura de la
