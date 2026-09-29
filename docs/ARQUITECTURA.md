@@ -122,6 +122,7 @@ Todas las entidades llevan `id` (uuid) y `userId` (multitenant-ready).
 | dayNumber | number | 1..daysPerWeek dentro de esa semana |
 | startedAt | ISO date | inicio real |
 | finishedAt | ISO date | fin real (para calcular duración) |
+| setCount | number | nº de series registradas. **Criterio de "sesión válida"**: solo cuenta como día entrenado si `setCount > 0`. Las sesiones "fantasma" (Empezar y salir) no cuentan y se descartan. |
 
 > **Clave del "editar sin drama":** el historial de lo que hiciste vive en `sessions`
 > y `loggedSets`, que **copian** los datos del ejercicio en el momento de hacerlo.
@@ -139,6 +140,7 @@ Todas las entidades llevan `id` (uuid) y `userId` (multitenant-ready).
 | weight | number | kg levantados |
 | reps | number | repeticiones hechas |
 | restTakenSeconds | number | descanso REAL antes de esta serie (para gráfica de descansos) |
+| userId | string | dueño de la serie (v2: indexado, multitenant + conteo eficiente) |
 | loggedAt | ISO date | fecha/hora exacta (fechas en todo, como pediste) |
 | isPR | boolean | true si al registrarla batió récord |
 
@@ -215,6 +217,17 @@ días de los que tu plan contempla sin registrar actividad. (Regla exacta en
 - Diario. Objetivo 00:01; realidad sin backend: **al abrir la app**, si no hay backup
   con el `dateKey` de hoy, se genera. En Android se intenta además en segundo plano.
 - Exportable/importable a fichero JSON (los datos son del usuario y portables).
+- **Import seguro:** `importAll` valida el fichero (app, `dataVersion`, forma de los
+  arrays) ANTES de tocar la base; rechaza backups ajenos o de versión incompatible; y
+  crea un backup automático del estado actual antes de reemplazar. Nunca destruye datos
+  si el fichero no es válido.
+
+## 7.1 Versionado del esquema
+
+El esquema de IndexedDB está versionado con Dexie (`APP.dataVersion`). La v2 (peer review)
+añadió `userId` indexado en `loggedSets` y `setCount` en `sessions`, con una migración
+**no destructiva** (`db.version(2).upgrade(...)`) que rellena ambos campos en los datos ya
+guardados. Regla: cualquier cambio de esquema sube la versión y migra sin perder datos.
 
 ## 8. Empaquetado y despliegue
 

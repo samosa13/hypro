@@ -14,9 +14,11 @@ progresado **de verdad** (semanas efectivas de entrenamiento, no de calendario).
 
 ## Estado
 
-- **Fase 1 (MVP, "libreta digital")** — en construcción.
-- Fase 2 (inteligencia: semanas efectivas, progreso, rachas) — planificada.
-- Fase 3 (producto: múltiples planes, multitenant, Google Play) — planificada.
+- **Fase 1 (MVP, "libreta digital")** — COMPLETA, verificada y endurecida.
+- **Fase 2 (inteligencia: semanas efectivas, progreso, rachas, estancamiento)** — COMPLETA.
+- Peer review completa aplicada (14 hallazgos resueltos) + 34 tests verdes.
+- **En producción:** https://samosa13.github.io/hypro/ (deploy automático por push a `main`).
+- Fase 3 (producto: múltiples planes, multitenant, Google Play) — planificada (ver steering `#hypro-contexto`).
 
 Ver el detalle en `docs/REQUISITOS.md` y `docs/ARQUITECTURA.md`.
 
@@ -43,6 +45,9 @@ Ver el detalle en `docs/REQUISITOS.md` y `docs/ARQUITECTURA.md`.
 ```bash
 cd gym
 npm install
-npm run dev      # desarrollo
+npm run dev      # desarrollo (localhost:PORT/hypro/)
 npm run build    # producción (genera dist/ instalable como PWA)
+
+# tests (npm run test puede dar exit -1 según el entorno):
+node node_modules/vitest/vitest.mjs run
 ```
