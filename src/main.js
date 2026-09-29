@@ -16,6 +16,7 @@ import { t, setLocale, resolveInitialLocale } from './i18n/index.js';
 
 import { renderTrain, cancelRestTimer } from './ui/screens/trainScreen.js';
 import { renderPlan } from './ui/screens/planScreen.js';
+import { renderWelcome } from './ui/screens/welcomeScreen.js';
 import { renderExercises } from './ui/screens/exercisesScreen.js';
 import { renderProgress } from './ui/screens/progressScreen.js';
 import { renderSettings } from './ui/screens/settingsScreen.js';
@@ -70,6 +71,14 @@ async function navigate(tabId) {
   clearLayers();     // cambiar de tab resetea el contexto de sub-pantallas (#7)
   current = tabId;
   renderChrome();
+  // Onboarding: si aún no hay plan y el usuario está en "Entrenar", mostramos
+  // la pantalla de bienvenida (mejor primera impresión) en vez de un aviso soso.
+  // El CTA lleva a Plan para crear el plan.
+  if (tabId === 'train' && !(await app.repo.getActivePlan(app.userId))) {
+    renderWelcome(root, app, () => navigate('plan'));
+    window.scrollTo(0, 0);
+    return;
+  }
   const tab = TABS.find((x) => x.id === tabId);
   await tab.render(root, app);
   window.scrollTo(0, 0);

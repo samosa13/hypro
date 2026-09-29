@@ -17,6 +17,15 @@ export default {
   'common.edit': 'Editar',
   'common.delete': 'Quitar',
 
+  // --- Bienvenida / onboarding (estado sin plan) ---
+  'welcome.title': 'Bienvenido a Hypro',
+  'welcome.subtitle': 'Tu progreso, en serio.',
+  'welcome.pitch': 'Registra tus series, bate tus récords y ve cuánto progresas de verdad. Empieza creando tu plan de entrenamiento.',
+  'welcome.cta': 'Crear mi plan',
+  'welcome.feature1': '📈 Semana real de entrenamiento, no de calendario',
+  'welcome.feature2': '🏆 Récords automáticos con fecha',
+  'welcome.feature3': '⏱️ Cronómetro de descanso con aviso',
+
   // --- Navegación (tabs) ---
   'nav.train': 'Entrenar',
   'nav.plan': 'Plan',

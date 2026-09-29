@@ -268,6 +268,31 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 }
 
 .empty { text-align: center; color: var(--color-text-muted); padding: 40px 20px; }
+
+/* Pantalla de bienvenida / onboarding */
+.welcome { padding-top: 24px; }
+.welcome-hero { text-align: center; padding: 24px 0 20px; }
+.welcome-logo {
+  width: 96px; height: 96px; margin: 0 auto 16px;
+  color: var(--color-accent);
+  background: radial-gradient(circle at 30% 25%, var(--color-surface-hi, #2a2a36), var(--color-surface-alt));
+  border: 1px solid var(--color-border);
+  border-radius: 26px; padding: 18px; display: grid; place-items: center;
+  box-shadow: 0 10px 40px var(--color-accent-glow, rgba(255,106,0,.3));
+}
+.welcome-name {
+  font-family: var(--font-display); font-size: 52px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; line-height: 1;
+}
+.welcome-name .accent { color: var(--color-accent); }
+.welcome-sub { color: var(--color-text-muted); font-weight: 600; margin-top: 6px; letter-spacing: .3px; }
+.welcome-heading { font-weight: 800; font-size: 17px; margin-bottom: 8px; }
+.welcome-pitch { font-size: 15px; line-height: 1.5; color: var(--color-text-muted); }
+.welcome-features { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.welcome-feat {
+  background: var(--color-surface-alt); border: 1px solid var(--color-border);
+  border-radius: var(--radius-small); padding: 12px 14px; font-size: 14px; font-weight: 600;
+}
 .list-scroll { max-height: 60vh; overflow-y: auto; }
 .spacer { height: 8px; }
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
