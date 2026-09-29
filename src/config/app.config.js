@@ -31,33 +31,41 @@ export const APP = {
  */
 export const THEME = {
   colors: {
-    // Fondos
-    bg: '#0a0a0c',           // negro casi puro
-    surface: '#15151a',      // tarjetas
-    surfaceAlt: '#1e1e26',   // tarjetas alternas / inputs
-    border: '#2a2a34',
+    // Fondos (con más escalones para dar profundidad en v2)
+    bg: '#08080a',           // negro casi puro (fondo base)
+    bgElevated: '#101014',   // zona elevada sutil
+    surface: '#16161c',      // tarjetas
+    surfaceAlt: '#20202a',   // tarjetas alternas / inputs
+    surfaceHi: '#2a2a36',    // hover / borde-luz superior
+    border: '#2c2c38',
+    borderSoft: '#22222c',
 
     // Acento (naranja eléctrico)
     accent: '#ff6a00',
     accentSoft: '#ff8c3a',
+    accentDeep: '#e85d00',
     accentGlow: 'rgba(255, 106, 0, 0.35)',
+    accentDim: 'rgba(255, 106, 0, 0.12)', // fondos tenues (pill activa, éxito suave)
 
     // Texto
-    text: '#f5f5f7',
-    textMuted: '#a0a0aa',
-    textFaint: '#6a6a75',
+    text: '#f6f6f8',
+    textMuted: '#9a9aa6',
+    textFaint: '#63636f',
 
     // Estados
     success: '#31d158',      // PR / progreso
+    successDim: 'rgba(49, 209, 88, 0.14)',
     warning: '#ffd60a',      // estancamiento
     danger: '#ff453a',       // racha rota / faltas
 
     // Récord (celebración)
     pr: '#ffd60a',
   },
-  radius: '16px',
-  radiusSmall: '10px',
+  radius: '18px',
+  radiusSmall: '12px',
+  // Display = tipografía condensada deportiva (números/títulos). Body = Inter.
   font: "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+  fontDisplay: "'Barlow Condensed', 'Inter', system-ui, sans-serif",
 };
 
 /**
@@ -88,4 +96,5 @@ export function applyTheme(theme = THEME) {
   root.style.setProperty('--radius', theme.radius);
   root.style.setProperty('--radius-small', theme.radiusSmall);
   root.style.setProperty('--font', theme.font);
+  root.style.setProperty('--font-display', theme.fontDisplay);
 }

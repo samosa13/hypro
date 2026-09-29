@@ -11,6 +11,7 @@ import { h, clear, toast } from './ui/dom.js';
 import { icon } from './ui/icons.js';
 import { ensureNotificationPermission, showLocalNotification, registerPeriodicBackup } from './ui/notifications.js';
 import { setupInstallBanner, setupUpdateBanner } from './ui/pwaInstall.js';
+import { initNav, clearLayers } from './ui/nav.js';
 
 import { renderTrain, cancelRestTimer } from './ui/screens/trainScreen.js';
 import { renderPlan } from './ui/screens/planScreen.js';
@@ -19,6 +20,7 @@ import { renderProgress } from './ui/screens/progressScreen.js';
 import { renderSettings } from './ui/screens/settingsScreen.js';
 
 applyTheme();
+initNav(); // soporte del botón/gesto "atrás" de Android (History API)
 
 // Banner de instalación/actualización (como VendIX). Se engancha cuanto antes
 // para no perder el evento beforeinstallprompt.
@@ -68,6 +70,7 @@ function renderChrome() {
 
 async function navigate(tabId) {
   cancelRestTimer(); // cancelar cronómetro de descanso al cambiar de pantalla (#9)
+  clearLayers();     // cambiar de tab resetea el contexto de sub-pantallas (#7)
   current = tabId;
   renderChrome();
   const tab = TABS.find((t) => t.id === tabId);

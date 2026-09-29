@@ -2,10 +2,11 @@
  * UI · Pantalla "Plan" — crear/editar plan, días con nombre libre y sus ejercicios.
  * RF-10..RF-14. Editar no rompe historial (el historial vive en sessions/loggedSets).
  */
-import { h, clear, toast } from '../dom.js';
+import { h, clear, toast, confirmDialog } from '../dom.js';
 import { icon } from '../icons.js';
+import { pushLayer, popLayer } from '../nav.js';
 
-export async function renderPlan(root, app) {
+export async function renderPlan(root, app, opts = {}) {
   clear(root);
   const screen = h('div', { class: 'screen' });
   screen.appendChild(h('h2', {}, 'Mi plan'));
@@ -32,19 +33,27 @@ export async function renderPlan(root, app) {
     h('button', { class: 'btn btn-ghost btn-sm', onClick: () => openNewPlan(root, app) }, 'Nuevo'),
   ]));
 
+  const dayCards = {};
   for (const day of days) {
     const exs = await app.repo.listPlanExercises(day.id);
-    screen.appendChild(h('div', { class: 'card' }, [
+    const cardEl = h('div', { class: 'card' }, [
       h('div', { class: 'row-between' }, [
         h('div', { style: 'font-weight:800' }, `Día ${day.order}: ${day.name}`),
         h('button', { class: 'btn btn-ghost btn-sm', onClick: () => openEditDay(root, app, plan, day) }, 'Editar'),
       ]),
       h('div', { class: 'muted', style: 'margin-top:6px' },
         exs.length ? `${exs.length} ejercicios` : 'Sin ejercicios aún'),
-    ]));
+    ]);
+    dayCards[day.id] = cardEl;
+    screen.appendChild(cardEl);
   }
 
   root.appendChild(screen);
+
+  // Volver al punto de origen: si venimos de editar un día, hacer scroll a él (#5).
+  if (opts.scrollToDayId && dayCards[opts.scrollToDayId]) {
+    dayCards[opts.scrollToDayId].scrollIntoView({ block: 'center' });
+  }
 }
 
 async function openNewPlan(root, app) {
@@ -60,21 +69,36 @@ async function openNewPlan(root, app) {
     h('label', {}, '¿Cuántas veces entrenas por semana?'), dpw,
   ]));
 
+  const doCreate = async () => {
+    const n = Math.max(1, Math.min(7, parseInt(dpw.value) || 3));
+    const plan = await app.repo.savePlan({ name: name.value.trim() || 'Mi rutina', daysPerWeek: n, isActive: true }, app.userId);
+    await app.repo.setActivePlan(plan.id, app.userId);
+    for (let i = 1; i <= n; i++) {
+      await app.repo.savePlanDay({ planId: plan.id, name: `Día ${i}`, order: i });
+    }
+    toast('Plan creado. Ahora edita cada día.');
+    popLayer();
+    renderPlan(root, app);
+  };
+
   screen.appendChild(h('button', {
     class: 'btn', onClick: async () => {
-      const n = Math.max(1, Math.min(7, parseInt(dpw.value) || 3));
-      const plan = await app.repo.savePlan({ name: name.value.trim() || 'Mi rutina', daysPerWeek: n, isActive: true }, app.userId);
-      await app.repo.setActivePlan(plan.id, app.userId);
-      // Crear los N días con nombre por defecto (editable)
-      for (let i = 1; i <= n; i++) {
-        await app.repo.savePlanDay({ planId: plan.id, name: `Día ${i}`, order: i });
+      // Si ya hay un plan activo, crear otro lo reemplaza: confirmar (#2).
+      const active = await app.repo.getActivePlan(app.userId);
+      if (active) {
+        const ok = await confirmDialog(
+          'Crear un plan nuevo reemplazará tu plan activo (el anterior se conserva en tus datos). ¿Continuar?',
+          { confirmText: 'Crear plan nuevo', danger: false }
+        );
+        if (!ok) return;
       }
-      toast('Plan creado. Ahora edita cada día.');
-      renderPlan(root, app);
+      await doCreate();
     }
   }, 'Crear plan'));
-  screen.appendChild(h('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onClick: () => renderPlan(root, app) }, 'Cancelar'));
+  screen.appendChild(h('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onClick: () => { popLayer(); renderPlan(root, app); } }, 'Cancelar'));
   root.appendChild(screen);
+  // Registrar capa: el gesto atrás cancela y vuelve al Plan.
+  pushLayer(() => renderPlan(root, app));
 }
 
 async function openEditDay(root, app, plan, day) {
@@ -118,7 +142,15 @@ async function openEditDay(root, app, plan, day) {
             h('div', { class: 'muted' }, `${pe.targetSets}×${pe.targetReps} · ${pe.targetWeight}kg · ${pe.restSeconds}s`),
           ]),
         ]),
-        h('button', { class: 'btn btn-danger btn-sm', onClick: async () => { await app.repo.deletePlanExercise(pe.id); paintExercises(); } }, '✕'),
+        h('button', {
+          class: 'btn btn-danger btn-sm',
+          onClick: async () => {
+            const ok = await confirmDialog(`¿Quitar "${ex.name}" de este día?`, { confirmText: 'Quitar' });
+            if (!ok) return;
+            await app.repo.deletePlanExercise(pe.id);
+            paintExercises();
+          }
+        }, '✕'),
       ]));
     }
   }
@@ -162,6 +194,9 @@ async function openEditDay(root, app, plan, day) {
     }, '+ Añadir al día'),
   ]));
 
-  screen.appendChild(h('button', { class: 'btn', style: 'margin-top:8px', onClick: () => renderPlan(root, app) }, 'Hecho'));
+  const back = () => { popLayer(); renderPlan(root, app, { scrollToDayId: day.id }); };
+  screen.appendChild(h('button', { class: 'btn', style: 'margin-top:8px', onClick: back }, 'Hecho'));
   root.appendChild(screen);
+  // Registrar capa: el gesto atrás vuelve al Plan, al día que se editaba.
+  pushLayer(() => renderPlan(root, app, { scrollToDayId: day.id }));
 }

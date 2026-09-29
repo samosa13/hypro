@@ -237,6 +237,30 @@ guardados. Regla: cualquier cambio de esquema sube la versión y migra sin perde
 - **iOS futuro:** la misma base PWA; ciertas capacidades (push, background) siguen
   las reglas de Safari, se adaptan en la capa de notificaciones.
 
+## 8.1 Navegación y flujo de retorno
+
+La app es una SPA sin router de historial completo. Para que el **botón/gesto "atrás"
+de Android** funcione (cerrar overlay/sub-pantalla en vez de salir de la app), hay una
+capa mínima sobre la History API en `src/ui/nav.js`:
+- `initNav()` escucha `popstate` y, si hay capas abiertas, cierra la de arriba.
+- Cada sub-pantalla (nuevo plan, editar día, nuevo ejercicio) y cada overlay (descanso,
+  confirmación) hace `pushLayer(closeFn)` al abrirse y `popLayer()` al cerrarse por botón.
+- Orden del "atrás": overlay → sub-pantalla → tab → (salir de la app).
+- Cambiar de tab (`navigate`) hace `clearLayers()` (reset de contexto).
+
+**Retorno al punto de origen:** editar un día vuelve al Plan haciendo scroll a la tarjeta
+de ese día (`renderPlan(root, app, {scrollToDayId})`); los filtros de Ejercicios persisten
+a nivel de módulo entre renders. Acciones destructivas (crear plan nuevo que reemplaza el
+activo, quitar ejercicio de un día) piden `confirmDialog`.
+
+## 8.2 Tema visual (v2)
+
+Tipografía: **Barlow Condensed** (display: títulos, números, timer) + **Inter** (cuerpo),
+self-hosted en `public/fonts/` (offline-first, sin llamadas externas). Profundidad con
+degradados sutiles en tarjetas + sombras + glow radial de fondo. Nav inferior con "pill"
+activa. Rest timer con anillo circular SVG que se vacía. Todo el color sigue viniendo de
+`THEME` en `app.config.js` (variables CSS); nada hardcodeado.
+
 ## 9. Estructura de carpetas
 
 ```

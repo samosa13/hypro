@@ -8,6 +8,7 @@ import { icon } from '../icons.js';
 import { positionLabel } from '../../domain/effectiveWeek.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { initAudio, beepWarning, beepEnd, beepPR, vibrate } from '../sound.js';
+import { pushLayer, popLayer } from '../nav.js';
 
 // Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
 // cancelarlo si el usuario navega fuera de Entrenar (peer review #9).
@@ -18,6 +19,7 @@ export function cancelRestTimer() {
   if (activeRestTimer) {
     clearInterval(activeRestTimer.interval);
     activeRestTimer.overlay?.remove();
+    if (activeRestTimer.hadLayer) popLayer(); // sincroniza el historial (#8)
     activeRestTimer = null;
   }
 }
@@ -43,7 +45,7 @@ export async function renderTrain(root, app) {
   const ordered = [...days].sort((a, b) => a.order - b.order);
   const todayDay = ordered.length ? ordered[(dayInWeek - 1) % ordered.length] : null;
 
-  screen.appendChild(h('div', { class: 'banner' }, pos));
+  screen.appendChild(h('div', { class: 'banner week' }, pos));
   screen.appendChild(h('div', { class: 'card row-between' }, [
     h('div', {}, [
       h('div', { class: 'muted' }, 'Toca entrenar hoy'),
@@ -78,7 +80,7 @@ async function renderActiveSession(root, app, ctx) {
 
   clear(root);
   const screen = h('div', { class: 'screen' });
-  screen.appendChild(h('div', { class: 'banner' }, `${pos} · ${day.name}`));
+  screen.appendChild(h('div', { class: 'banner week' }, `${pos} · ${day.name}`));
 
   for (const pe of planExercises) {
     const ex = exMap[pe.exerciseId];
@@ -214,15 +216,34 @@ async function startRestTimer(app, seconds) {
 
   cancelRestTimer(); // no solapar timers
 
+  const total = seconds;
   let remaining = seconds;
+
+  // Anillo circular SVG que se vacía (r=90 → circunferencia ≈ 565.49).
+  const R = 90, C = 2 * Math.PI * R;
   const num = h('div', { class: 'timer-num' }, String(remaining));
+  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  ring.setAttribute('viewBox', '0 0 200 200');
+  ring.innerHTML =
+    `<circle class="ring-bg" cx="100" cy="100" r="${R}"/>` +
+    `<circle class="ring-fg" cx="100" cy="100" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="0"/>`;
+  const fg = ring.querySelector('.ring-fg');
+  const ringWrap = h('div', { class: 'timer-ring' }, [num]);
+  ringWrap.insertBefore(ring, num);
+
+  const setRing = () => {
+    const frac = Math.max(0, remaining) / total;
+    fg.style.strokeDashoffset = String(C * (1 - frac)); // se vacía al avanzar
+  };
+  setRing();
+
   const overlay = h('div', { class: 'rest-overlay pr-flash' }, [
     h('div', { class: 'box' }, [
-      h('div', { class: 'muted' }, 'Descanso'),
-      num,
+      h('div', { class: 'muted', style: 'margin-bottom:10px;text-transform:uppercase;letter-spacing:2px' }, 'Descanso'),
+      ringWrap,
       h('div', { class: 'spacer' }),
       h('button', { class: 'btn btn-ghost btn-sm', onClick: stop }, 'Saltar descanso'),
-      h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:8px', onClick: () => { remaining += 15; num.textContent = String(remaining); } }, '+15s'),
+      h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:8px', onClick: () => { remaining += 15; num.textContent = String(remaining); setRing(); } }, '+15s'),
     ]),
   ]);
   document.body.appendChild(overlay);
@@ -231,15 +252,24 @@ async function startRestTimer(app, seconds) {
   const interval = setInterval(() => {
     remaining--;
     num.textContent = String(Math.max(0, remaining));
+    setRing();
     if (remaining <= lead && remaining > 0) {
       num.classList.add('warn');
+      ringWrap.classList.add('warn');
       if (!warned) { warned = true; if (soundOn) beepWarning(); vibrate(80); }
     }
     if (remaining <= 0) { finish(); }
   }, 1000);
 
   // Registrar el timer activo para poder cancelarlo al navegar (peer review #9).
-  activeRestTimer = { interval, overlay };
+  activeRestTimer = { interval, overlay, hadLayer: true };
+  // Capa de navegación: el gesto "atrás" cierra el descanso (peer review nav #8).
+  // El close solo limpia interval+overlay (el popstate ya consumió el estado).
+  pushLayer(() => {
+    clearInterval(interval);
+    overlay.remove();
+    activeRestTimer = null;
+  });
 
   function finish() {
     cancelRestTimer();

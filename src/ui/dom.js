@@ -35,3 +35,35 @@ export function toast(msg, ms = 2200) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.remove(), ms);
 }
+
+/**
+ * Diálogo de confirmación para acciones destructivas (peer review navegación
+ * #2, #3). Devuelve una Promise<boolean>. Registra una capa de navegación para
+ * que el gesto "atrás" lo cierre como "cancelar".
+ * @param {string} message
+ * @param {object} opts { confirmText, cancelText, danger }
+ */
+export async function confirmDialog(message, opts = {}) {
+  const { confirmText = 'Confirmar', cancelText = 'Cancelar', danger = true } = opts;
+  const nav = await import('./nav.js'); // import dinámico para evitar ciclos
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (val, viaBack) => {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      if (!viaBack) nav.popLayer(); // sincroniza historial si se cerró por botón
+      resolve(val);
+    };
+    const overlay = h('div', { class: 'pr-flash confirm-overlay' }, [
+      h('div', { class: 'card', style: 'max-width:320px;margin:16px;text-align:center' }, [
+        h('div', { style: 'font-weight:700;margin-bottom:16px' }, message),
+        h('button', { class: danger ? 'btn btn-danger' : 'btn', onClick: () => finish(true, false) }, confirmText),
+        h('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onClick: () => finish(false, false) }, cancelText),
+      ]),
+    ]);
+    document.body.appendChild(overlay);
+    // Capa de navegación: el gesto atrás equivale a cancelar (viaBack=true).
+    nav.pushLayer(() => { overlay.remove(); if (!settled) { settled = true; resolve(false); } });
+  });
+}
