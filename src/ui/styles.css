@@ -166,6 +166,28 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
   z-index: 50; font-weight: 600; animation: fadein .2s ease;
 }
 
+/* Banner de instalación / actualización (estilo VendIX) */
+.install-banner {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 200;
+  max-width: 536px; margin: 0 auto;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-soft));
+  color: #111; border-radius: var(--radius);
+  padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+}
+.install-banner.hidden { display: none; }
+.install-banner.update { background: var(--color-surface-alt); color: var(--color-text); border: 1px solid var(--color-accent); }
+.install-banner .install-text { flex: 1; font-weight: 700; font-size: 14px; }
+.install-banner .install-yes {
+  background: #111; color: var(--color-accent); font-weight: 800;
+  padding: 10px 16px; border-radius: 10px; font-size: 14px;
+}
+.install-banner.update .install-yes { background: var(--color-accent); color: #111; }
+.install-banner .install-no {
+  background: transparent; color: #111; font-size: 18px; font-weight: 800;
+  width: 36px; height: 36px; border-radius: 10px;
+}
+
 .empty { text-align: center; color: var(--color-text-muted); padding: 40px 20px; }
 .list-scroll { max-height: 60vh; overflow-y: auto; }
 .spacer { height: 8px; }

@@ -23,6 +23,14 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 // App-shell: cualquier navegación cae en index.html (offline-first).
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
 
+// Actualización: cuando la UI pide SKIP_WAITING, el SW nuevo toma el control
+// sin esperar a que se cierren todas las pestañas (aviso "Actualizar").
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });

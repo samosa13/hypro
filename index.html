@@ -15,6 +15,21 @@
   </head>
   <body>
     <div id="app"></div>
+
+    <!-- Banner de instalación propio (como VendIX): aparece cuando el navegador
+         permite instalar. El usuario pulsa "Instalar" y acepta el prompt nativo. -->
+    <div id="install-banner" class="install-banner hidden">
+      <span class="install-text">📲 Instala Hypro en tu móvil</span>
+      <button id="install-btn" class="install-yes">Instalar</button>
+      <button id="install-dismiss" class="install-no" aria-label="Cerrar">✕</button>
+    </div>
+
+    <!-- Aviso de actualización: aparece cuando hay una versión nueva desplegada. -->
+    <div id="update-banner" class="install-banner update hidden">
+      <span class="install-text">🔄 Hay una versión nueva de Hypro</span>
+      <button id="update-btn" class="install-yes">Actualizar</button>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

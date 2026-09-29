@@ -10,6 +10,7 @@ import { daysBetween } from './domain/dateKey.js';
 import { h, clear, toast } from './ui/dom.js';
 import { icon } from './ui/icons.js';
 import { ensureNotificationPermission, showLocalNotification, registerPeriodicBackup } from './ui/notifications.js';
+import { setupInstallBanner, setupUpdateBanner } from './ui/pwaInstall.js';
 
 import { renderTrain } from './ui/screens/trainScreen.js';
 import { renderPlan } from './ui/screens/planScreen.js';
@@ -18,6 +19,11 @@ import { renderProgress } from './ui/screens/progressScreen.js';
 import { renderSettings } from './ui/screens/settingsScreen.js';
 
 applyTheme();
+
+// Banner de instalación/actualización (como VendIX). Se engancha cuanto antes
+// para no perder el evento beforeinstallprompt.
+setupInstallBanner();
+setupUpdateBanner();
 
 const app = createAppService();
 const root = document.getElementById('app');
