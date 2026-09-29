@@ -22,6 +22,12 @@ export const APP = {
   dataVersion: 2,
   // Usuario local por defecto (multitenant-ready: mañana será el id real)
   defaultUserId: 'me',
+  // Internacionalización (i18n). Español por defecto. Para vender en más
+  // idiomas: añadir el código aquí + su diccionario en src/i18n/. La app ya
+  // usa t('clave') en todo, así que no hay que tocar pantallas.
+  defaultLocale: 'es',
+  supportedLocales: ['es'], // añadir 'en', etc. cuando existan sus diccionarios
+  version: '0.1.0',
 };
 
 /**

@@ -4,11 +4,12 @@
  */
 import { h, clear, toast } from '../dom.js';
 import { APP } from '../../config/app.config.js';
+import { t, setLocale, getLocale } from '../../i18n/index.js';
 
 export async function renderSettings(root, app) {
   clear(root);
   const screen = h('div', { class: 'screen' });
-  screen.appendChild(h('h2', {}, 'Ajustes'));
+  screen.appendChild(h('h2', {}, t('settings.title')));
 
   const s = await app.repo.getSettings(app.userId);
 
@@ -20,17 +21,26 @@ export async function renderSettings(root, app) {
   const inactivity = h('input', { type: 'number', min: '1', value: String(s.inactivityThresholdDays) });
   const gymStart = h('input', { type: 'date', value: (s.gymStartDate ?? '').slice(0, 10) });
 
+  // Selector de idioma (i18n). Solo español disponible hoy, pero funcional:
+  // añadir idiomas es ampliar APP.supportedLocales + su diccionario.
+  const langSel = h('select', {},
+    (APP.supportedLocales || ['es']).map((code) => h('option', { value: code }, t(`lang.${code}`)))
+  );
+  langSel.value = getLocale();
+
   screen.appendChild(h('div', { class: 'card' }, [
-    h('label', {}, 'Series por defecto'), defaultSets,
-    h('label', {}, 'Descanso por defecto (segundos)'), rest,
-    h('label', {}, 'Bip de aviso a falta de (segundos)'), lead,
-    h('label', {}, 'Días sin entrenar para el aviso motivador'), inactivity,
-    h('label', {}, 'Fecha de inicio en el gimnasio'), gymStart,
-    h('div', { class: 'row-between', style: 'margin-top:14px' }, [h('span', {}, 'Sonido del temporizador'), sound]),
-    h('div', { class: 'row-between', style: 'margin-top:10px' }, [h('span', {}, 'Entreno de noche (frase por la mañana)'), night]),
+    h('label', {}, t('settings.defaultSets')), defaultSets,
+    h('label', {}, t('settings.defaultRest')), rest,
+    h('label', {}, t('settings.beepLead')), lead,
+    h('label', {}, t('settings.inactivityDays')), inactivity,
+    h('label', {}, t('settings.gymStart')), gymStart,
+    h('label', {}, t('settings.language')), langSel,
+    h('div', { class: 'row-between', style: 'margin-top:14px' }, [h('span', {}, t('settings.sound')), sound]),
+    h('div', { class: 'row-between', style: 'margin-top:10px' }, [h('span', {}, t('settings.night')), night]),
     h('button', {
       class: 'btn', style: 'margin-top:16px',
       onClick: async () => {
+        const newLocale = langSel.value;
         await app.repo.saveSettings({
           ...s,
           defaultSets: parseInt(defaultSets.value) || 3,
@@ -39,22 +49,25 @@ export async function renderSettings(root, app) {
           inactivityThresholdDays: parseInt(inactivity.value) || 4,
           soundEnabled: sound.checked,
           trainsAtNight: night.checked,
+          locale: newLocale,
           // El <input type=date> da "YYYY-MM-DD"; lo interpretamos como fecha
           // LOCAL (no UTC) para que no se desfase un día en husos al oeste (#12).
           gymStartDate: gymStart.value ? localDateToISO(gymStart.value) : s.gymStartDate,
         }, app.userId);
-        toast('Ajustes guardados');
+        setLocale(newLocale);        // aplica el idioma elegido
+        toast(t('settings.saved'));
+        renderSettings(root, app);   // re-render para reflejar el idioma nuevo
       }
-    }, 'Guardar ajustes'),
+    }, t('settings.saveSettings')),
   ]));
 
   // --- Backup ---
-  screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, 'Copia de seguridad'));
+  screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, t('settings.backup')));
   screen.appendChild(h('div', { class: 'card' }, [
-    h('div', { class: 'muted', style: 'margin-bottom:12px' }, 'Tus datos son solo tuyos. Expórtalos a un fichero para guardarlos fuera del móvil.'),
-    h('button', { class: 'btn btn-ghost btn-sm', onClick: exportData }, '⬇ Exportar copia (.json)'),
+    h('div', { class: 'muted', style: 'margin-bottom:12px' }, t('settings.backupHint')),
+    h('button', { class: 'btn btn-ghost btn-sm', onClick: exportData }, t('settings.export')),
     h('div', { class: 'spacer' }),
-    h('label', { style: 'margin-top:10px' }, 'Importar copia'),
+    h('label', { style: 'margin-top:10px' }, t('settings.import')),
     (() => {
       const file = h('input', { type: 'file', accept: 'application/json' });
       file.addEventListener('change', () => importData(file));
@@ -62,10 +75,9 @@ export async function renderSettings(root, app) {
     })(),
   ]));
 
-  screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:20px' }, `${APP.name} v${'0.1.0'} · datos locales en tu dispositivo`));
+  screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:20px' }, t('settings.footer', { app: APP.name, version: APP.version })));
   // Atribución de iconos (requisito de la licencia CC BY 3.0 de game-icons).
-  screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:6px;font-size:11px' },
-    'Iconos: game-icons.github.io (CC BY 3.0), Tabler (MIT), Material Design Icons, Phosphor.'));
+  screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:6px;font-size:11px' }, t('settings.iconsCredit')));
   root.appendChild(screen);
 
   async function exportData() {
@@ -77,7 +89,7 @@ export async function renderSettings(root, app) {
     a.download = `hypro-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('Copia exportada');
+    toast(t('settings.exported'));
   }
 
   async function importData(fileInput) {
@@ -88,13 +100,13 @@ export async function renderSettings(root, app) {
       const data = JSON.parse(text);
       const res = await app.repo.importAll(data, app.userId);
       if (res && res.ok === false) {
-        toast(res.reason || 'Backup no válido');
+        toast(res.reason || t('settings.invalidFile'));
         return;
       }
-      toast('Datos restaurados');
+      toast(t('settings.restored'));
       renderSettings(root, app);
     } catch (e) {
-      toast('Fichero no válido');
+      toast(t('settings.invalidFile'));
     }
   }
 }

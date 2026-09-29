@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 import { MUSCLE_GROUPS, EQUIPMENT_TYPES } from '../../data/seedExercises.js';
 import { ICON_KEYS } from '../icons.js';
 import { pushLayer, popLayer } from '../nav.js';
+import { t } from '../../i18n/index.js';
 
 // Estado de filtros persistente a nivel de módulo (peer review navegación #6):
 // se conserva al volver de crear un ejercicio o cambiar de pestaña.
@@ -15,21 +16,21 @@ const filterState = { muscle: '', equipment: '', q: '' };
 export async function renderExercises(root, app) {
   clear(root);
   const screen = h('div', { class: 'screen' });
-  screen.appendChild(h('h2', {}, 'Ejercicios'));
+  screen.appendChild(h('h2', {}, t('ex.title')));
 
   const state = filterState; // referencia compartida (persiste entre renders)
   const listWrap = h('div', { class: 'list-scroll' });
 
   // Filtros (se re-aplican los valores guardados)
   const muscleSel = h('select', {}, [
-    h('option', { value: '' }, 'Todos los músculos'),
+    h('option', { value: '' }, t('ex.allMuscles')),
     ...MUSCLE_GROUPS.map((m) => h('option', { value: m }, m)),
   ]);
   const equipSel = h('select', {}, [
-    h('option', { value: '' }, 'Todo el equipo'),
+    h('option', { value: '' }, t('ex.allEquipment')),
     ...EQUIPMENT_TYPES.map((e) => h('option', { value: e }, e)),
   ]);
-  const search = h('input', { type: 'search', placeholder: 'Buscar ejercicio…' });
+  const search = h('input', { type: 'search', placeholder: t('ex.searchPh') });
   // Restaurar los filtros guardados en los controles.
   muscleSel.value = state.muscle;
   equipSel.value = state.equipment;
@@ -46,7 +47,7 @@ export async function renderExercises(root, app) {
 
   screen.appendChild(filters);
   screen.appendChild(
-    h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:12px', onClick: () => openNewExercise(app, paint) }, '+ Crear ejercicio propio')
+    h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:12px', onClick: () => openNewExercise(app, paint) }, t('ex.createOwn'))
   );
   screen.appendChild(listWrap);
   root.appendChild(screen);
@@ -61,7 +62,7 @@ export async function renderExercises(root, app) {
       (!state.q || e.name.toLowerCase().includes(state.q))
     );
     if (filtered.length === 0) {
-      listWrap.appendChild(h('div', { class: 'empty' }, 'No hay ejercicios con esos filtros.'));
+      listWrap.appendChild(h('div', { class: 'empty' }, t('ex.none')));
       return;
     }
     for (const ex of filtered.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -73,7 +74,7 @@ export async function renderExercises(root, app) {
             h('div', { class: 'row', style: 'gap:6px;margin-top:4px' }, [
               h('span', { class: 'chip' }, ex.muscleGroup),
               h('span', { class: 'chip' }, ex.equipment),
-              ex.isCustom ? h('span', { class: 'chip' }, 'propio') : null,
+              ex.isCustom ? h('span', { class: 'chip' }, t('ex.own')) : null,
             ]),
           ]),
         ])
@@ -90,9 +91,9 @@ function openNewExercise(app, paint) {
   const root = document.getElementById('app');
   clear(root);
   const screen = h('div', { class: 'screen' });
-  screen.appendChild(h('h2', {}, 'Nuevo ejercicio'));
+  screen.appendChild(h('h2', {}, t('ex.new')));
 
-  const name = h('input', { placeholder: 'Nombre del ejercicio' });
+  const name = h('input', { placeholder: t('ex.namePh') });
   const muscle = h('select', {}, MUSCLE_GROUPS.map((m) => h('option', { value: m }, m)));
   const equip = h('select', {}, EQUIPMENT_TYPES.map((e) => h('option', { value: e }, e)));
   const iconSel = h('select', {}, ICON_KEYS.map((k) => h('option', { value: k }, k)));
@@ -101,25 +102,25 @@ function openNewExercise(app, paint) {
   iconSel.addEventListener('change', () => { preview.innerHTML = icon(iconSel.value); });
 
   screen.appendChild(h('div', { class: 'card' }, [
-    h('label', {}, 'Nombre'), name,
-    h('label', {}, 'Grupo muscular'), muscle,
-    h('label', {}, 'Equipo'), equip,
-    h('label', {}, 'Icono'),
+    h('label', {}, t('ex.name')), name,
+    h('label', {}, t('ex.muscleGroup')), muscle,
+    h('label', {}, t('ex.equipment')), equip,
+    h('label', {}, t('ex.icon')),
     h('div', { class: 'row' }, [preview, iconSel]),
   ]));
 
   screen.appendChild(h('button', {
     class: 'btn', onClick: async () => {
-      if (!name.value.trim()) { toast('Ponle un nombre'); return; }
+      if (!name.value.trim()) { toast(t('ex.needName')); return; }
       await app.repo.addExercise({
         name: name.value.trim(), muscleGroup: muscle.value, equipment: equip.value, icon: iconSel.value,
       }, app.userId);
-      toast('Ejercicio creado');
+      toast(t('ex.created'));
       popLayer();
       renderExercises(root, app);
     }
-  }, 'Guardar'));
-  screen.appendChild(h('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onClick: () => { popLayer(); renderExercises(root, app); } }, 'Cancelar'));
+  }, t('common.save')));
+  screen.appendChild(h('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onClick: () => { popLayer(); renderExercises(root, app); } }, t('common.cancel')));
   root.appendChild(screen);
   // Registrar capa: el gesto atrás cancela y vuelve a Ejercicios.
   pushLayer(() => renderExercises(root, app));

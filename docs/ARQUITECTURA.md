@@ -261,6 +261,32 @@ degradados sutiles en tarjetas + sombras + glow radial de fondo. Nav inferior co
 activa. Rest timer con anillo circular SVG que se vacía. Todo el color sigue viniendo de
 `THEME` en `app.config.js` (variables CSS); nada hardcodeado.
 
+## 8.3 Internacionalización (i18n)
+
+Español por defecto, preparado para vender en más idiomas sin tocar pantallas.
+- `src/i18n/index.js`: `t(clave, params)` con fallback (idioma actual → español →
+  la propia clave), `setLocale`, `getLocale`, `resolveInitialLocale` (preferencia
+  guardada → idioma del navegador → default, todo filtrado por `supportedLocales`).
+- `src/i18n/es.js`: diccionario español, **fuente de verdad de las claves**.
+- Config en `app.config.js`: `defaultLocale: 'es'`, `supportedLocales: ['es']`.
+- Todas las pantallas usan `t('clave')`. Añadir un idioma = crear `en.js`,
+  registrarlo en `index.js` y añadir `'en'` a `supportedLocales`. El selector de
+  idioma está en Ajustes y persiste en `settings.locale`.
+- **Pendiente i18n fase 2** (queda en español hasta que entre un 2º idioma):
+  frases motivadoras (`motivation.js`), texto del coach de progresión
+  (`progression.js`), nombres de ejercicios semilla (`seedExercises.js`, son datos
+  editables → decisión de modelo), y literales sueltos ("Cargando…", unidades
+  kg/reps, nombres por defecto de plan/día).
+
+## 8.4 iOS / iPhone (preparado para Fase 3)
+
+La misma PWA corre en Safari iOS. Ya configurado en `index.html`:
+`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`,
+`apple-mobile-web-app-title` y `apple-touch-icon` (192/512, rutas `/hypro/icons/`
+correctas en producción; 404 solo en `npm run dev`). Instalación en iOS: Safari →
+Compartir → "Añadir a pantalla de inicio". Capacidades que degradan en iOS y que el
+código ya maneja best-effort: Web Push, Periodic Background Sync, matices de Web Audio.
+
 ## 9. Estructura de carpetas
 
 ```

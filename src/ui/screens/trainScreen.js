@@ -9,6 +9,7 @@ import { positionLabel } from '../../domain/effectiveWeek.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { initAudio, beepWarning, beepEnd, beepPR, vibrate } from '../sound.js';
 import { pushLayer, popLayer } from '../nav.js';
+import { t } from '../../i18n/index.js';
 
 // Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
 // cancelarlo si el usuario navega fuera de Entrenar (peer review #9).
@@ -31,7 +32,7 @@ export async function renderTrain(root, app) {
 
   const plan = await app.repo.getActivePlan(app.userId);
   if (!plan) {
-    screen.appendChild(h('div', { class: 'empty' }, 'Crea tu plan primero (pestaña Plan).'));
+    screen.appendChild(h('div', { class: 'empty' }, t('train.needPlan')));
     root.appendChild(screen);
     return;
   }
@@ -48,7 +49,7 @@ export async function renderTrain(root, app) {
   screen.appendChild(h('div', { class: 'banner week' }, pos));
   screen.appendChild(h('div', { class: 'card row-between' }, [
     h('div', {}, [
-      h('div', { class: 'muted' }, 'Toca entrenar hoy'),
+      h('div', { class: 'muted' }, t('train.todayTrain')),
       h('div', { style: 'font-weight:800;font-size:20px' }, todayDay ? todayDay.name : '—'),
     ]),
   ]));
@@ -57,12 +58,12 @@ export async function renderTrain(root, app) {
 
   const planExercises = await app.repo.listPlanExercises(todayDay.id);
   if (planExercises.length === 0) {
-    screen.appendChild(h('div', { class: 'empty' }, 'Este día no tiene ejercicios. Añádelos en Plan.'));
+    screen.appendChild(h('div', { class: 'empty' }, t('train.dayNoExercises')));
     root.appendChild(screen);
     return;
   }
 
-  const startBtn = h('button', { class: 'btn', onClick: start }, '▶ Empezar sesión');
+  const startBtn = h('button', { class: 'btn', onClick: start }, t('train.start'));
   screen.appendChild(startBtn);
   root.appendChild(screen);
 
@@ -90,7 +91,7 @@ async function renderActiveSession(root, app, ctx) {
 
   // Nota de la sesión (#5): texto libre, se guarda al escribir.
   const noteInput = h('input', {
-    type: 'text', placeholder: '📝 Nota de hoy (opcional: sensaciones, molestias…)',
+    type: 'text', placeholder: t('train.note'),
     value: session.note ?? '',
   });
   noteInput.addEventListener('change', () => app.setSessionNote(session.id, noteInput.value));
@@ -104,13 +105,13 @@ async function renderActiveSession(root, app, ctx) {
       const discarded = await app.repo.discardSessionIfEmpty(session.id);
       if (!discarded) {
         await app.repo.finishSession(session.id);
-        toast('¡Sesión guardada! 💪');
+        toast(t('train.sessionSaved'));
       } else {
-        toast('Sesión vacía descartada');
+        toast(t('train.emptyDiscarded'));
       }
       renderTrain(root, app);
     }
-  }, '✓ Terminar sesión'));
+  }, t('train.finish')));
 
   // Cancelar/salir sin registrar: descarta la sesión fantasma.
   screen.appendChild(h('button', {
@@ -120,7 +121,7 @@ async function renderActiveSession(root, app, ctx) {
       await app.repo.discardSessionIfEmpty(session.id);
       renderTrain(root, app);
     }
-  }, 'Salir sin guardar'));
+  }, t('train.exitNoSave')));
 
   root.appendChild(screen);
 }
@@ -137,10 +138,10 @@ async function exerciseCard(app, ctx, pe, ex) {
     h('div', {}, [
       h('div', { style: 'font-weight:800' }, ex.name),
       pr
-        ? h('div', { class: 'pr-line' }, `🏆 PR: ${pr.repsAtBest} reps × ${pr.bestWeight}kg (${formatDate(pr.achievedAt)})`)
-        : h('div', { class: 'muted' }, 'Sin récord aún — ¡a por el primero!'),
+        ? h('div', { class: 'pr-line' }, t('train.prLine', { reps: pr.repsAtBest, weight: pr.bestWeight, date: formatDate(pr.achievedAt) }))
+        : h('div', { class: 'muted' }, t('train.noPR')),
       prevSets.length
-        ? h('div', { class: 'last-line' }, 'Última vez: ' + prevSets.map((s) => `${s.weight}×${s.reps}`).join(' · '))
+        ? h('div', { class: 'last-line' }, t('train.lastTime', { sets: prevSets.map((s) => `${s.weight}×${s.reps}`).join(' · ') }))
         : null,
       // Sugerencia de progresión (coach ligero, #1)
       suggestion ? h('div', { class: 'suggestion' }, `💡 ${suggestion.text}`) : null,
@@ -169,7 +170,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const row = h('div', { class: 'set-row' });
 
   // Botón "repetir la serie anterior" (#3): copia lo último confirmado.
-  const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: 'Repetir última serie', onClick: () => {
+  const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.repeatSet'), onClick: () => {
     weight.value = String(lastEntered.weight ?? prefillWeight ?? 0);
     reps.value = String(lastEntered.reps ?? prefillReps ?? 0);
   } }, '⟲');
@@ -184,7 +185,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   async function confirm() {
     const w = parseFloat(weight.value) || 0;
     const r = parseInt(reps.value) || 0;
-    if (w <= 0 || r <= 0) { toast('Pon peso y reps'); return; }
+    if (w <= 0 || r <= 0) { toast(t('train.needWeightReps')); return; }
 
     // Recordar lo confirmado para el botón "repetir" de la siguiente serie (#3).
     lastEntered.weight = w;
@@ -239,11 +240,11 @@ async function startRestTimer(app, seconds) {
 
   const overlay = h('div', { class: 'rest-overlay pr-flash' }, [
     h('div', { class: 'box' }, [
-      h('div', { class: 'muted', style: 'margin-bottom:10px;text-transform:uppercase;letter-spacing:2px' }, 'Descanso'),
+      h('div', { class: 'muted', style: 'margin-bottom:10px;text-transform:uppercase;letter-spacing:2px' }, t('train.rest')),
       ringWrap,
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn btn-ghost btn-sm', onClick: stop }, 'Saltar descanso'),
-      h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:8px', onClick: () => { remaining += 15; num.textContent = String(remaining); setRing(); } }, '+15s'),
+      h('button', { class: 'btn btn-ghost btn-sm', onClick: stop }, t('train.skipRest')),
+      h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:8px', onClick: () => { remaining += 15; num.textContent = String(remaining); setRing(); } }, t('train.addRest')),
     ]),
   ]);
   document.body.appendChild(overlay);
@@ -275,7 +276,7 @@ async function startRestTimer(app, seconds) {
     cancelRestTimer();
     if (soundOn) beepEnd();
     vibrate([120, 60, 120]);
-    toast('¡A por la siguiente serie!');
+    toast(t('train.nextSet'));
   }
   function stop() { cancelRestTimer(); }
 }
@@ -287,7 +288,7 @@ function celebratePR(ex, weight, reps) {
   const flash = h('div', { class: 'pr-flash' }, [
     h('div', { class: 'box' }, [
       h('div', { class: 'trophy' }, '🏆'),
-      h('div', { class: 'txt' }, '¡NUEVO RÉCORD!'),
+      h('div', { class: 'txt' }, t('train.newRecord')),
       h('div', { class: 'sub2' }, `${ex.name}: ${weight}kg × ${reps}`),
     ]),
   ]);

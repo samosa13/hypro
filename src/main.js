@@ -12,6 +12,7 @@ import { icon } from './ui/icons.js';
 import { ensureNotificationPermission, showLocalNotification, registerPeriodicBackup } from './ui/notifications.js';
 import { setupInstallBanner, setupUpdateBanner } from './ui/pwaInstall.js';
 import { initNav, clearLayers } from './ui/nav.js';
+import { t, setLocale, resolveInitialLocale } from './i18n/index.js';
 
 import { renderTrain, cancelRestTimer } from './ui/screens/trainScreen.js';
 import { renderPlan } from './ui/screens/planScreen.js';
@@ -22,20 +23,16 @@ import { renderSettings } from './ui/screens/settingsScreen.js';
 applyTheme();
 initNav(); // soporte del botón/gesto "atrás" de Android (History API)
 
-// Banner de instalación/actualización (como VendIX). Se engancha cuanto antes
-// para no perder el evento beforeinstallprompt.
-setupInstallBanner();
-setupUpdateBanner();
-
 const app = createAppService();
 const root = document.getElementById('app');
 
+// La etiqueta se resuelve con t() en cada render (para reaccionar al idioma).
 const TABS = [
-  { id: 'train', label: 'Entrenar', icon: 'ex_press_banca_barra', render: renderTrain },
-  { id: 'plan', label: 'Plan', icon: 'ex_sentadilla', render: renderPlan },
-  { id: 'exercises', label: 'Ejercicios', icon: 'ex_curl_db', render: renderExercises },
-  { id: 'progress', label: 'Progreso', icon: 'ex_dominadas', render: renderProgress },
-  { id: 'settings', label: 'Ajustes', icon: 'ex_press_maquina', render: renderSettings },
+  { id: 'train', labelKey: 'nav.train', icon: 'ex_press_banca_barra', render: renderTrain },
+  { id: 'plan', labelKey: 'nav.plan', icon: 'ex_sentadilla', render: renderPlan },
+  { id: 'exercises', labelKey: 'nav.exercises', icon: 'ex_curl_db', render: renderExercises },
+  { id: 'progress', labelKey: 'nav.progress', icon: 'ex_dominadas', render: renderProgress },
+  { id: 'settings', labelKey: 'nav.settings', icon: 'ex_press_maquina', render: renderSettings },
 ];
 
 let current = 'train';
@@ -55,13 +52,13 @@ function renderChrome() {
   document.body.insertBefore(topbar, document.body.firstChild);
 
   const tabbar = h('div', { class: 'tabbar' },
-    TABS.map((t) =>
+    TABS.map((tab) =>
       h('button', {
-        class: t.id === current ? 'active' : '',
-        onClick: () => navigate(t.id),
+        class: tab.id === current ? 'active' : '',
+        onClick: () => navigate(tab.id),
       }, [
-        h('div', { class: 'ico', html: icon(t.icon) }),
-        h('span', {}, t.label),
+        h('div', { class: 'ico', html: icon(tab.icon) }),
+        h('span', {}, t(tab.labelKey)),
       ])
     )
   );
@@ -73,7 +70,7 @@ async function navigate(tabId) {
   clearLayers();     // cambiar de tab resetea el contexto de sub-pantallas (#7)
   current = tabId;
   renderChrome();
-  const tab = TABS.find((t) => t.id === tabId);
+  const tab = TABS.find((x) => x.id === tabId);
   await tab.render(root, app);
   window.scrollTo(0, 0);
 }
@@ -102,7 +99,16 @@ async function showOpeningMessage() {
 async function boot() {
   clear(root);
   root.appendChild(h('div', { class: 'empty' }, 'Cargando…'));
-  await app.bootstrap();
+  const settings0 = await app.bootstrap();
+  // Aplica el idioma guardado (o el del navegador) ANTES de pintar y ANTES de
+  // los banners, para que todo (incl. instalar/actualizar) salga en el idioma
+  // correcto cuando haya más de uno (peer review i18n #1).
+  setLocale(resolveInitialLocale(settings0?.locale));
+
+  // Banner de instalación/actualización (como VendIX), ya con el idioma aplicado.
+  setupInstallBanner();
+  setupUpdateBanner();
+
   await navigate('train');
   setTimeout(showOpeningMessage, 600);
 

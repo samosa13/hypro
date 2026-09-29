@@ -8,11 +8,12 @@ import { tenureLabel } from '../../domain/gymTenure.js';
 import { positionLabel } from '../../domain/effectiveWeek.js';
 import { currentStreak } from '../../domain/streak.js';
 import { formatDate } from '../../domain/dateKey.js';
+import { t } from '../../i18n/index.js';
 
 export async function renderProgress(root, app) {
   clear(root);
   const screen = h('div', { class: 'screen' });
-  screen.appendChild(h('h2', {}, 'Progreso'));
+  screen.appendChild(h('h2', {}, t('progress.title')));
 
   const settings = await app.repo.getSettings(app.userId);
   const plan = await app.repo.getActivePlan(app.userId);
@@ -32,11 +33,11 @@ export async function renderProgress(root, app) {
     h('div', { class: 'grid2' }, [
       h('div', { class: 'metric' }, [
         h('div', { class: 'big', style: 'font-size:18px' }, effLabel),
-        h('div', { class: 'lbl' }, 'En tu plan actual'),
+        h('div', { class: 'lbl' }, t('progress.inPlan')),
       ]),
       h('div', { class: 'metric' }, [
         h('div', { class: 'big', style: 'font-size:18px' }, tenure),
-        h('div', { class: 'lbl' }, 'En el gimnasio'),
+        h('div', { class: 'lbl' }, t('progress.inGym')),
       ]),
     ]),
   ]));
@@ -45,9 +46,9 @@ export async function renderProgress(root, app) {
   const sessionDates = sessions.map((s) => s.startedAt);
   const streak = plan ? currentStreak(sessionDates, plan.daysPerWeek) : 0;
   screen.appendChild(h('div', { class: 'card grid3' }, [
-    metric(summary.sessions, 'Sesiones'),
-    metric(summary.prs, 'Récords'),
-    metric(streak, 'Racha 🔥'),
+    metric(summary.sessions, t('progress.sessions')),
+    metric(summary.prs, t('progress.records')),
+    metric(streak, t('progress.streak')),
   ]));
 
   // --- Aviso de estancamiento de la semana (RB-4) ---
@@ -56,10 +57,10 @@ export async function renderProgress(root, app) {
     if (plateaus.length > 0) {
       screen.appendChild(h('div', { class: 'card', style: 'border-color:var(--color-warning)' }, [
         h('div', { style: 'font-weight:800;color:var(--color-warning);margin-bottom:8px' },
-          `⚠️ Semana ${String(week).padStart(2, '0')}: sin superar récord`),
+          t('progress.plateauTitle', { week: String(week).padStart(2, '0') })),
         ...plateaus.map((p) =>
           h('div', { class: 'muted', style: 'margin:4px 0' },
-            `${p.exerciseName}: tu récord sigue siendo del ${formatDate(p.prDate)}. ¡A por él la próxima!`)
+            t('progress.plateauLine', { name: p.exerciseName, date: formatDate(p.prDate) }))
         ),
       ]));
     }
@@ -67,9 +68,9 @@ export async function renderProgress(root, app) {
 
   // --- Gráfica de asistencia (últimas 8 semanas de calendario, informativa) ---
   screen.appendChild(h('div', { class: 'card' }, [
-    h('div', { style: 'font-weight:800;margin-bottom:10px' }, 'Asistencia (últimas semanas)'),
+    h('div', { style: 'font-weight:800;margin-bottom:10px' }, t('progress.attendance')),
     attendanceBars(sessionDates),
-    h('div', { class: 'faint', style: 'margin-top:8px' }, 'Barras naranjas = semanas con entreno. Rojas = semanas sin registrar.'),
+    h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.attendanceHint')),
   ]));
 
   // --- Descansos reales y duración de sesiones (RF-28, RF-34) ---
@@ -77,20 +78,20 @@ export async function renderProgress(root, app) {
   if (stats.restSamples.length > 0 || stats.sessionDurations.length > 0) {
     const durList = stats.sessionDurations.slice(-8);
     screen.appendChild(h('div', { class: 'card' }, [
-      h('div', { style: 'font-weight:800;margin-bottom:10px' }, 'Descansos y duración'),
+      h('div', { style: 'font-weight:800;margin-bottom:10px' }, t('progress.restDuration')),
       h('div', { class: 'grid2' }, [
         h('div', { class: 'metric' }, [
           h('div', { class: 'big', style: 'font-size:24px' }, stats.avgRest ? `${stats.avgRest}s` : '—'),
-          h('div', { class: 'lbl' }, 'Descanso medio entre series'),
+          h('div', { class: 'lbl' }, t('progress.avgRest')),
         ]),
         h('div', { class: 'metric' }, [
           h('div', { class: 'big', style: 'font-size:24px' },
             durList.length ? `${Math.round(durList.reduce((a, b) => a + b.minutes, 0) / durList.length)} min` : '—'),
-          h('div', { class: 'lbl' }, 'Duración media de sesión'),
+          h('div', { class: 'lbl' }, t('progress.avgDuration')),
         ]),
       ]),
       durList.length ? durationBars(durList) : null,
-      durList.length ? h('div', { class: 'faint', style: 'margin-top:8px' }, 'Minutos por sesión (últimas 8).') : null,
+      durList.length ? h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.durationHint')) : null,
     ]));
   }
 
@@ -99,9 +100,7 @@ export async function renderProgress(root, app) {
     const { ranking: volume, isCompletedWeek } = await app.weeklyVolume();
     if (volume.length > 0) {
       const maxV = Math.max(...volume.map((v) => v.sets));
-      const title = isCompletedWeek
-        ? 'Volumen última semana completa (series por músculo)'
-        : 'Volumen esta semana (series por músculo)';
+      const title = isCompletedWeek ? t('progress.volumeLastWeek') : t('progress.volumeThisWeek');
       screen.appendChild(h('div', { class: 'card' }, [
         h('div', { style: 'font-weight:800;margin-bottom:10px' }, title),
         ...volume.map((v) =>
@@ -113,15 +112,15 @@ export async function renderProgress(root, app) {
             h('div', { class: 'vol-count' }, String(v.sets)),
           ])
         ),
-        h('div', { class: 'faint', style: 'margin-top:8px' }, 'El volumen semanal por músculo es la clave de la hipertrofia.'),
+        h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.volumeHint')),
       ]));
     }
   }
 
   // --- PRs por ejercicio con fecha ---
-  screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, 'Tus récords'));
+  screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, t('progress.yourRecords')));
   if (prs.length === 0) {
-    screen.appendChild(h('div', { class: 'empty' }, 'Aún no hay récords. Entrena y llegarán.'));
+    screen.appendChild(h('div', { class: 'empty' }, t('progress.noRecords')));
   } else {
     for (const pr of prs.sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))) {
       const ex = exMap[pr.exerciseId];

@@ -9,7 +9,20 @@
  *   muestra un banner "Actualizar" que recarga con la versión fresca.
  */
 
+import { t } from '../i18n/index.js';
+
 let deferredPrompt = null;
+
+// Captura el evento cuanto antes (puede dispararse antes de setupInstallBanner,
+// que ahora corre tras setLocale). Guardamos el prompt para usarlo al montar.
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const banner = document.getElementById('install-banner');
+    if (banner && !isStandalone()) banner.classList.remove('hidden');
+  });
+}
 
 /** Inicializa el banner de instalación. */
 export function setupInstallBanner() {
@@ -18,13 +31,13 @@ export function setupInstallBanner() {
   const dismiss = document.getElementById('install-dismiss');
   if (!banner || !btn) return;
 
-  // El navegador nos avisa de que la app es instalable.
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    // No mostrar si ya está instalada (modo standalone)
-    if (!isStandalone()) banner.classList.remove('hidden');
-  });
+  // Textos localizados (el HTML trae los de español como fallback).
+  const txt = banner.querySelector('.install-text');
+  if (txt) txt.textContent = t('pwa.installText');
+  btn.textContent = t('pwa.install');
+
+  // Si el evento ya llegó antes de montar, mostrar el banner ahora.
+  if (deferredPrompt && !isStandalone()) banner.classList.remove('hidden');
 
   btn.addEventListener('click', async () => {
     if (!deferredPrompt) { banner.classList.add('hidden'); return; }
@@ -52,6 +65,10 @@ export function setupUpdateBanner() {
   const banner = document.getElementById('update-banner');
   const btn = document.getElementById('update-btn');
   if (!banner || !btn || !('serviceWorker' in navigator)) return;
+
+  const txt = banner.querySelector('.install-text');
+  if (txt) txt.textContent = t('pwa.updateText');
+  btn.textContent = t('pwa.update');
 
   navigator.serviceWorker.ready.then((reg) => {
     // Si aparece un SW nuevo esperando, avisar.
