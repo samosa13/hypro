@@ -86,6 +86,14 @@ async function renderActiveSession(root, app, ctx) {
     screen.appendChild(await exerciseCard(app, ctx, pe, ex));
   }
 
+  // Nota de la sesión (#5): texto libre, se guarda al escribir.
+  const noteInput = h('input', {
+    type: 'text', placeholder: '📝 Nota de hoy (opcional: sensaciones, molestias…)',
+    value: session.note ?? '',
+  });
+  noteInput.addEventListener('change', () => app.setSessionNote(session.id, noteInput.value));
+  screen.appendChild(h('div', { class: 'card' }, [noteInput]));
+
   // Terminar: marca fin y descarta la sesión si quedó vacía (peer review #1).
   screen.appendChild(h('button', {
     class: 'btn', style: 'margin-top:8px',
@@ -117,7 +125,9 @@ async function renderActiveSession(root, app, ctx) {
 
 async function exerciseCard(app, ctx, pe, ex) {
   const pr = await app.repo.getPR(ex.id, app.userId);
-  const prevSets = await lastSessionSets(app, ex.id, ctx.session.id);
+  const last = await app.lastPerformance(ex.id, ctx.session.id);       // #2 autorrelleno
+  const suggestion = await app.suggestionFor(ex, pe, ctx.session.id);   // #1 sugerencia
+  const prevSets = last?.sets ?? [];
 
   const card = h('div', { class: 'card' });
   card.appendChild(h('div', { class: 'row' }, [
@@ -130,35 +140,53 @@ async function exerciseCard(app, ctx, pe, ex) {
       prevSets.length
         ? h('div', { class: 'last-line' }, 'Última vez: ' + prevSets.map((s) => `${s.weight}×${s.reps}`).join(' · '))
         : null,
+      // Sugerencia de progresión (coach ligero, #1)
+      suggestion ? h('div', { class: 'suggestion' }, `💡 ${suggestion.text}`) : null,
     ]),
   ]));
 
-  // Filas de series (targetSets)
+  // Valores por defecto de las series: lo de la última vez, si no el objetivo (#2).
+  const prefillWeight = last ? last.weight : (pe.targetWeight ?? 0);
+  const prefillReps = last ? last.reps : (pe.targetReps ?? 0);
+
+  // Filas de series (targetSets). Comparten un "estado previo" para el botón repetir (#3).
   const setsWrap = h('div', { style: 'margin-top:10px' });
   const nSets = pe.targetSets || 3;
+  const lastEntered = { weight: prefillWeight, reps: prefillReps };
   for (let i = 1; i <= nSets; i++) {
-    setsWrap.appendChild(setRow(app, ctx, pe, ex, i));
+    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { prefillWeight, prefillReps, lastEntered }));
   }
   card.appendChild(setsWrap);
   return card;
 }
 
-function setRow(app, ctx, pe, ex, setNumber) {
-  const weight = h('input', { type: 'number', min: '0', step: '0.5', value: String(pe.targetWeight ?? 0), style: 'width:80px' });
-  const reps = h('input', { type: 'number', min: '0', value: String(pe.targetReps ?? 0), style: 'width:70px' });
+function setRow(app, ctx, pe, ex, setNumber, opts) {
+  const { prefillWeight, prefillReps, lastEntered } = opts;
+  const weight = h('input', { type: 'number', min: '0', step: '0.5', value: String(prefillWeight ?? 0), style: 'width:80px' });
+  const reps = h('input', { type: 'number', min: '0', value: String(prefillReps ?? 0), style: 'width:70px' });
   const row = h('div', { class: 'set-row' });
 
+  // Botón "repetir la serie anterior" (#3): copia lo último confirmado.
+  const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: 'Repetir última serie', onClick: () => {
+    weight.value = String(lastEntered.weight ?? prefillWeight ?? 0);
+    reps.value = String(lastEntered.reps ?? prefillReps ?? 0);
+  } }, '⟲');
   const doneBtn = h('button', { class: 'btn btn-sm', onClick: confirm }, '✓');
 
   row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, 'kg'));
   row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+  row.appendChild(repeatBtn);
   row.appendChild(doneBtn);
 
   async function confirm() {
     const w = parseFloat(weight.value) || 0;
     const r = parseInt(reps.value) || 0;
     if (w <= 0 || r <= 0) { toast('Pon peso y reps'); return; }
+
+    // Recordar lo confirmado para el botón "repetir" de la siguiente serie (#3).
+    lastEntered.weight = w;
+    lastEntered.reps = r;
 
     // El descanso real lo calcula appService desde el loggedAt de la última
     // serie persistida (peer review #10): medida estable, sin estado en la vista.
@@ -238,14 +266,4 @@ function celebratePR(ex, weight, reps) {
   setTimeout(() => flash.remove(), 2600);
 }
 
-/** Series de la última sesión previa en que se hizo este ejercicio. */
-async function lastSessionSets(app, exerciseId, currentSessionId) {
-  const sets = await app.repo.listSetsForExercise(exerciseId);
-  const prior = sets.filter((s) => s.sessionId !== currentSessionId);
-  if (prior.length === 0) return [];
-  // agrupa por sesión, coge la más reciente
-  const bySession = {};
-  for (const s of prior) (bySession[s.sessionId] ??= []).push(s);
-  const latestId = prior.sort((a, b) => new Date(b.loggedAt) - new Date(a.loggedAt))[0].sessionId;
-  return bySession[latestId].sort((a, b) => a.setNumber - b.setNumber);
-}
+

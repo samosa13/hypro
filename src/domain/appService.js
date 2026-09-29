@@ -219,6 +219,75 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Mejor serie (por 1RM) de la última SESIÓN previa en que se hizo el
+     * ejercicio. Sirve para autorrelleno y sugerencia de progresión (#1, #2).
+     * @returns {Promise<{weight:number, reps:number, sets:Array}|null>}
+     */
+    async lastPerformance(exerciseId, excludeSessionId = null) {
+      const all = await repo.listSetsForExercise(exerciseId);
+      const prior = all.filter((s) => s.sessionId !== excludeSessionId);
+      if (prior.length === 0) return null;
+      // Sesión previa más reciente.
+      const latestId = prior.sort((a, b) => new Date(b.loggedAt) - new Date(a.loggedAt))[0].sessionId;
+      const sets = prior.filter((s) => s.sessionId === latestId).sort((a, b) => a.setNumber - b.setNumber);
+      // Mejor serie de esa sesión por 1RM estimado.
+      let best = sets[0];
+      for (const s of sets) if (estimate1RM(s.weight, s.reps) > estimate1RM(best.weight, best.reps)) best = s;
+      return { weight: best.weight, reps: best.reps, sets };
+    },
+
+    /**
+     * Sugerencia de progresión para un ejercicio (#1). Combina la última
+     * actuación con el objetivo del plan y el tipo de equipo.
+     */
+    async suggestionFor(exercise, planExercise, excludeSessionId = null) {
+      const last = await this.lastPerformance(exercise.id, excludeSessionId);
+      const { suggestNext } = await import('./progression.js');
+      return suggestNext({
+        lastBest: last ? { weight: last.weight, reps: last.reps } : null,
+        target: { targetReps: planExercise?.targetReps, targetWeight: planExercise?.targetWeight },
+        equipment: exercise.equipment,
+      });
+    },
+
+    /**
+     * Volumen por grupo muscular (#4). Devuelve el volumen de la semana en
+     * curso; si esta acaba de empezar (0 series aún, justo tras cerrar una
+     * semana) devuelve el de la última semana completa marcándolo con
+     * `isCompletedWeek=true` para que la UI lo etiquete correctamente.
+     * @returns {Promise<{ranking:Array<{muscle,sets}>, isCompletedWeek:boolean}>}
+     */
+    async weeklyVolume() {
+      const plan = await repo.getActivePlan(userId);
+      if (!plan) return { ranking: [], isCompletedWeek: false };
+      const dpw = Math.max(1, plan.daysPerWeek);
+      const valid = (await repo.listValidSessions(userId))
+        .filter((s) => s.planId === plan.id)
+        .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+      const doneWeeks = Math.floor(valid.length / dpw);
+      const weekSessions = valid.slice(doneWeeks * dpw); // resto = semana en curso
+      // Si la semana en curso aún no tiene series, mostramos la última completa.
+      const isCompletedWeek = weekSessions.length === 0 && valid.length > 0;
+      const target = weekSessions.length ? weekSessions : valid.slice(-dpw);
+
+      const exercises = await repo.listExercises(userId);
+      const muscleById = Object.fromEntries(exercises.map((e) => [e.id, e.muscleGroup]));
+      const sets = [];
+      for (const s of target) {
+        const ss = await repo.listSetsForSession(s.id);
+        for (const st of ss) sets.push({ muscleGroup: muscleById[st.exerciseId] });
+      }
+      const { volumeByMuscle, volumeRanking } = await import('./volume.js');
+      return { ranking: volumeRanking(volumeByMuscle(sets)), isCompletedWeek };
+    },
+
+    /** Guarda una nota de texto libre en una sesión (#5). */
+    async setSessionNote(sessionId, note) {
+      return repo.updateSessionNote(sessionId, note);
+    },
+
+    /**
      * Estadísticas de descansos reales y duración de sesiones (RF-28, RF-34).
      * @returns {{avgRest:number, restSamples:number[], sessionDurations:Array}}
      */

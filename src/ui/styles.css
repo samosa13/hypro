@@ -126,6 +126,7 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 
 .pr-line { color: var(--color-accent-soft); font-size: 13px; font-weight: 700; }
 .last-line { color: var(--color-text-muted); font-size: 13px; }
+.suggestion { color: var(--color-success); font-size: 13px; font-weight: 700; margin-top: 2px; }
 
 /* ---------- Timer ---------- */
 .timer-wrap { text-align: center; padding: 20px 0; }
@@ -194,3 +195,10 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
 .bars .bar { flex: 1; background: var(--color-accent); border-radius: 4px 4px 0 0; min-height: 2px; }
 .bars .bar.miss { background: var(--color-danger); opacity: .5; }
+
+/* Volumen semanal por músculo (barras horizontales) */
+.vol-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.vol-label { width: 78px; font-size: 13px; color: var(--color-text-muted); text-transform: capitalize; }
+.vol-bar-track { flex: 1; background: var(--color-surface-alt); border-radius: 999px; height: 14px; overflow: hidden; }
+.vol-bar { height: 100%; background: var(--color-accent); border-radius: 999px; }
+.vol-count { width: 26px; text-align: right; font-weight: 800; }

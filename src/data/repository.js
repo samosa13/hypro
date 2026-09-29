@@ -114,6 +114,10 @@ export const repository = {
   async finishSession(sessionId) {
     await db.sessions.update(sessionId, { finishedAt: new Date().toISOString() });
   },
+  /** Guarda una nota de texto libre en la sesión (#5). Campo libre, sin índice. */
+  async updateSessionNote(sessionId, note) {
+    await db.sessions.update(sessionId, { note: note ?? '' });
+  },
   /**
    * Elimina una sesión fantasma (sin series). Se usa al salir de Entrenar sin
    * haber registrado nada, para no dejar basura en la tabla.

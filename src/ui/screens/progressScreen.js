@@ -94,6 +94,30 @@ export async function renderProgress(root, app) {
     ]));
   }
 
+  // --- Volumen semanal por grupo muscular (#4) ---
+  if (plan) {
+    const { ranking: volume, isCompletedWeek } = await app.weeklyVolume();
+    if (volume.length > 0) {
+      const maxV = Math.max(...volume.map((v) => v.sets));
+      const title = isCompletedWeek
+        ? 'Volumen última semana completa (series por músculo)'
+        : 'Volumen esta semana (series por músculo)';
+      screen.appendChild(h('div', { class: 'card' }, [
+        h('div', { style: 'font-weight:800;margin-bottom:10px' }, title),
+        ...volume.map((v) =>
+          h('div', { class: 'vol-row' }, [
+            h('div', { class: 'vol-label' }, v.muscle),
+            h('div', { class: 'vol-bar-track' }, [
+              h('div', { class: 'vol-bar', style: `width:${Math.max(6, (v.sets / maxV) * 100)}%` }),
+            ]),
+            h('div', { class: 'vol-count' }, String(v.sets)),
+          ])
+        ),
+        h('div', { class: 'faint', style: 'margin-top:8px' }, 'El volumen semanal por músculo es la clave de la hipertrofia.'),
+      ]));
+    }
+  }
+
   // --- PRs por ejercicio con fecha ---
   screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, 'Tus récords'));
   if (prs.length === 0) {
