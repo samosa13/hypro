@@ -1,0 +1,27 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo Hypro. Monograma "H" que evoca una barra de pesas con la traviesa
+       ascendente (progreso). Naranja del tema sobre fondo oscuro de la app.
+       Este SVG es la fuente maestra; los PNG del manifest se generan de aquí. -->
+  <defs>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8c3a"/>
+      <stop offset="1" stop-color="#ff6a00"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo redondeado (mismo color que la app: #0a0a0c) -->
+  <rect width="512" height="512" rx="112" fill="#0a0a0c"/>
+
+  <!-- Postes verticales de la "H" (como soportes de barra) -->
+  <rect x="130" y="140" width="46" height="232" rx="16" fill="url(#orange)"/>
+  <rect x="336" y="140" width="46" height="232" rx="16" fill="url(#orange)"/>
+
+  <!-- Discos superior/inferior en los postes (guiño a la mancuerna) -->
+  <rect x="112" y="176" width="82" height="30" rx="12" fill="#ff8c3a"/>
+  <rect x="112" y="306" width="82" height="30" rx="12" fill="#ff8c3a"/>
+  <rect x="318" y="176" width="82" height="30" rx="12" fill="#ff8c3a"/>
+  <rect x="318" y="306" width="82" height="30" rx="12" fill="#ff8c3a"/>
+
+  <!-- Traviesa central ASCENDENTE de la "H": sugiere progreso/subida -->
+  <path d="M176 300 L336 212 L336 258 L176 346 Z" fill="url(#orange)"/>
+</svg>
