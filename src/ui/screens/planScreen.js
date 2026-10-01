@@ -223,34 +223,47 @@ async function openEditDay(root, app, plan, day) {
       // ¿Este ejercicio comparte grupo con el siguiente? (para el indicador visual)
       const next = items[idx + 1];
       const samGroupAsNext = pe.groupId && next && next.groupId === pe.groupId;
-      // Botones de reordenar (A5): suben/bajan el ejercicio una posición.
+      // Botones de acción del ejercicio. Van en una franja de POSICIÓN FIJA
+      // (absoluta) en la esquina superior derecha de la card, con tamaño
+      // reducido (btn-xs), para que estén SIEMPRE en el mismo sitio sin importar
+      // el largo del nombre ni el badge de grupo, y no se desborden.
       const upBtn = h('button', {
-        class: 'btn btn-ghost btn-sm', title: t('plan.moveUp'), disabled: isFirst,
+        class: 'btn btn-ghost btn-xs', title: t('plan.moveUp'), disabled: isFirst,
         onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, -1); paintExercises(); },
       }, '↑');
       const downBtn = h('button', {
-        class: 'btn btn-ghost btn-sm', title: t('plan.moveDown'), disabled: isLast,
+        class: 'btn btn-ghost btn-xs', title: t('plan.moveDown'), disabled: isLast,
         onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, +1); paintExercises(); },
       }, '↓');
-      // Agrupar con el siguiente (D17): solo si hay un siguiente y no están ya
-      // en el mismo grupo. Desagrupar si pertenece a un grupo.
+      // Agrupar con el siguiente (D17) / desagrupar.
       const groupBtns = [];
       if (pe.groupId) {
         groupBtns.push(h('button', {
-          class: 'btn btn-ghost btn-sm', title: t('plan.ungroup'),
+          class: 'btn btn-ghost btn-xs', title: t('plan.ungroup'),
           onClick: async () => { await app.repo.ungroup(day.id, pe.id); paintExercises(); },
         }, '🔗✕'));
       } else if (!isLast) {
         groupBtns.push(h('button', {
-          class: 'btn btn-ghost btn-sm', title: t('plan.groupWithNext'),
+          class: 'btn btn-ghost btn-xs', title: t('plan.groupWithNext'),
           onClick: async () => { await app.repo.groupWithNext(day.id, pe.id); paintExercises(); },
         }, '🔗'));
       }
+      const delBtn = h('button', {
+        class: 'btn btn-danger btn-xs', title: t('common.delete'),
+        onClick: async () => {
+          const ok = await confirmDialog(t('plan.removeExercise', { name: ex.name }), { confirmText: t('common.delete') });
+          if (!ok) return;
+          await app.repo.deletePlanExercise(pe.id);
+          paintExercises();
+        }
+      }, '✕');
       // Etiqueta de grupo (badge) si pertenece a uno.
       const groupBadge = pe.groupId
         ? h('span', { class: 'chip', style: 'margin-left:8px' }, t(`train.group.${pe.groupType || 'superset'}`))
         : null;
-      exWrap.appendChild(h('div', { class: `card row-between${pe.groupId ? ' grouped' : ''}${samGroupAsNext ? ' group-cont' : ''}` }, [
+      // Card con padding derecho reservado para la franja de botones (no la invade
+      // el texto). La franja de acciones va posicionada en absoluto.
+      exWrap.appendChild(h('div', { class: `card pe-card${pe.groupId ? ' grouped' : ''}${samGroupAsNext ? ' group-cont' : ''}` }, [
         h('div', { class: 'row' }, [
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
           h('div', {}, [
@@ -258,20 +271,7 @@ async function openEditDay(root, app, plan, day) {
             h('div', { class: 'muted' }, exerciseMetaText(pe, ex, settings)),
           ]),
         ]),
-        h('div', { class: 'row', style: 'gap:4px' }, [
-          ...groupBtns,
-          upBtn,
-          downBtn,
-          h('button', {
-            class: 'btn btn-danger btn-sm',
-            onClick: async () => {
-              const ok = await confirmDialog(t('plan.removeExercise', { name: ex.name }), { confirmText: t('common.delete') });
-              if (!ok) return;
-              await app.repo.deletePlanExercise(pe.id);
-              paintExercises();
-            }
-          }, '✕'),
-        ]),
+        h('div', { class: 'pe-actions' }, [...groupBtns, upBtn, downBtn, delBtn]),
       ]));
     });
     // Tras repintar los ejercicios, recalcular el aviso de duración (punto 2).
@@ -427,8 +427,12 @@ async function openEditDay(root, app, plan, day) {
     paintExercises();
   }
 
-  // Se guarda el texto crudo; matchesSearch normaliza al filtrar.
-  search.addEventListener('input', () => { pick.q = search.value; paintPicker(); });
+  // Se guarda el texto crudo; matchesSearch normaliza al filtrar. Se escuchan
+  // 'input' Y 'search' porque la "x" nativa de input[type=search] dispara
+  // 'search' (no siempre 'input'): sin esto, limpiar con la "x" no reseteaba.
+  const onPickSearch = () => { pick.q = search.value; paintPicker(); };
+  search.addEventListener('input', onPickSearch);
+  search.addEventListener('search', onPickSearch);
   muscleSel.addEventListener('change', () => { pick.muscle = muscleSel.value; paintPicker(); });
 
   // Barra de búsqueda visual con icono (estilo VendIX).

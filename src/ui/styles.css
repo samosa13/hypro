@@ -366,3 +366,19 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
   width: 100%; padding: 12px 14px 12px 42px;
   box-sizing: border-box;
 }
+
+/* ---------- Botones de acción de ejercicio en el editor del día ---------- */
+/* Botón extra-pequeño para las franjas de acciones compactas. */
+.btn-xs {
+  width: auto; padding: 4px 6px; font-size: 12px; line-height: 1;
+  border-radius: 8px; box-shadow: none; min-width: 28px; height: 28px;
+}
+/* Card de ejercicio del plan: posición relativa + hueco a la derecha reservado
+   para la franja de acciones, que va en posición ABSOLUTA (siempre el mismo
+   sitio, no se desborda aunque el nombre sea largo ni haya badge de grupo).
+   El hueco (padding-right) cabe hasta 4 botones de 28px con sus separaciones. */
+.pe-card { position: relative; padding-right: 136px; display: block; }
+.pe-actions {
+  position: absolute; top: 10px; right: 10px;
+  display: flex; gap: 3px; align-items: center;
+}

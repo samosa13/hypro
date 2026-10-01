@@ -42,7 +42,12 @@ export async function renderExercises(root, app) {
   equipSel.addEventListener('change', () => { state.equipment = equipSel.value; paint(); });
   // Se guarda el texto crudo; la normalización (minúsculas + sin acentos) la
   // hace matchesSearch al filtrar, para búsqueda multi-campo consistente.
-  search.addEventListener('input', () => { state.q = search.value; paint(); });
+  // Se escuchan 'input' Y 'search': la "x" nativa de input[type=search] dispara
+  // 'search' (no siempre 'input') en varios navegadores, y sin esto limpiar el
+  // campo con la "x" no reseteaba la lista.
+  const onSearch = () => { state.q = search.value; paint(); };
+  search.addEventListener('input', onSearch);
+  search.addEventListener('search', onSearch);
 
   // Barra de búsqueda visual con icono (estilo VendIX).
   const searchBar = h('div', { class: 'search-bar' }, [
