@@ -91,6 +91,8 @@ export default {
   'plan.selected': 'Seleccionado: {name}',
   'plan.changeExercise': 'Cambiar',
   'plan.pickFromList': 'Elige un ejercicio de la lista para configurarlo.',
+  'plan.moveUp': 'Subir',
+  'plan.moveDown': 'Bajar',
   'plan.sets': 'Series',
   'plan.targetReps': 'Reps objetivo',
   'plan.repRange': 'Rango de reps',

@@ -263,4 +263,37 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(totalSets).toBe(0);
     expect(pr).toBe(null);
   });
+
+  // --- A5: reordenar ejercicios de un día ---
+
+  it('movePlanExercise reordena y renumera contiguo, y persiste', async () => {
+    const { plan, days } = await setupPlan(1);
+    const day = days[0];
+    const exercises = await repository.listExercises(U);
+    // El setupPlan ya puso 1 ejercicio (order 1). Añadimos 2 más.
+    const sentadilla = exercises.find((e) => e.name === 'Sentadilla con barra');
+    const curl = exercises.find((e) => e.name === 'Curl con barra');
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: sentadilla.id, order: 2, targetSets: 3, targetReps: 10, targetWeight: 60, restSeconds: 90 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: curl.id, order: 3, targetSets: 3, targetReps: 10, targetWeight: 20, restSeconds: 90 });
+
+    let items = await repository.listPlanExercises(day.id);
+    expect(items.map((pe) => pe.exerciseId)).toEqual([items[0].exerciseId, sentadilla.id, curl.id]);
+
+    // Mover el 3º (curl) una posición arriba → queda en medio.
+    const changed = await repository.movePlanExercise(day.id, items[2].id, -1);
+    expect(changed).toBe(true);
+    items = await repository.listPlanExercises(day.id);
+    expect(items.map((pe) => pe.exerciseId)).toEqual([items[0].exerciseId, curl.id, sentadilla.id]);
+    // Orders contiguos 1..3.
+    expect(items.map((pe) => pe.order)).toEqual([1, 2, 3]);
+  });
+
+  it('movePlanExercise en los límites es no-op', async () => {
+    const { days } = await setupPlan(1);
+    const day = days[0];
+    const items = await repository.listPlanExercises(day.id);
+    // Subir el primero: fuera de límites → sin cambio.
+    const changed = await repository.movePlanExercise(day.id, items[0].id, -1);
+    expect(changed).toBe(false);
+  });
 });

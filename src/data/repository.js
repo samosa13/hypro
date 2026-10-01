@@ -86,6 +86,34 @@ export const repository = {
     await db.planExercises.delete(id);
   },
   /**
+   * Reordena un ejercicio dentro de su día moviéndolo una posición arriba
+   * (dir=-1) o abajo (dir=+1). Reescribe el campo `order` de forma contigua
+   * (1..N) tras el intercambio, para que no queden huecos ni empates. No-op si
+   * el movimiento se sale de los límites. Transaccional.
+   * @returns {Promise<boolean>} true si hubo cambio
+   */
+  async movePlanExercise(planDayId, planExerciseId, dir) {
+    let changed = false;
+    await db.transaction('rw', db.planExercises, async () => {
+      const items = (await db.planExercises.where('planDayId').equals(planDayId).toArray())
+        .sort((a, b) => a.order - b.order);
+      const idx = items.findIndex((pe) => pe.id === planExerciseId);
+      if (idx === -1) return;
+      const target = idx + dir;
+      if (target < 0 || target >= items.length) return; // fuera de límites
+      // Intercambia posiciones en el array y renumera 1..N (contiguo).
+      [items[idx], items[target]] = [items[target], items[idx]];
+      for (let i = 0; i < items.length; i++) {
+        const newOrder = i + 1;
+        if (items[i].order !== newOrder) {
+          await db.planExercises.update(items[i].id, { order: newOrder });
+        }
+      }
+      changed = true;
+    });
+    return changed;
+  },
+  /**
    * Todos los planExercises del usuario. planExercises no lleva userId (cuelga
    * de planDay → plan), así que se resuelve la propiedad por sus planes. Se usa
    * en la migración de rangos de reps (repMin/repMax).

@@ -137,9 +137,20 @@ async function openEditDay(root, app, plan, day) {
     if (items.length === 0) {
       exWrap.appendChild(h('div', { class: 'empty' }, t('plan.addExercisesBelow')));
     }
-    for (const pe of items) {
+    items.forEach((pe, idx) => {
       const ex = exMap[pe.exerciseId];
-      if (!ex) continue;
+      if (!ex) return;
+      const isFirst = idx === 0;
+      const isLast = idx === items.length - 1;
+      // Botones de reordenar (A5): suben/bajan el ejercicio una posición.
+      const upBtn = h('button', {
+        class: 'btn btn-ghost btn-sm', title: t('plan.moveUp'), disabled: isFirst,
+        onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, -1); paintExercises(); },
+      }, '↑');
+      const downBtn = h('button', {
+        class: 'btn btn-ghost btn-sm', title: t('plan.moveDown'), disabled: isLast,
+        onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, +1); paintExercises(); },
+      }, '↓');
       exWrap.appendChild(h('div', { class: 'card row-between' }, [
         h('div', { class: 'row' }, [
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
@@ -148,17 +159,21 @@ async function openEditDay(root, app, plan, day) {
             h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: repRangeLabel(pe), weight: pe.targetWeight, rest: pe.restSeconds })),
           ]),
         ]),
-        h('button', {
-          class: 'btn btn-danger btn-sm',
-          onClick: async () => {
-            const ok = await confirmDialog(t('plan.removeExercise', { name: ex.name }), { confirmText: t('common.delete') });
-            if (!ok) return;
-            await app.repo.deletePlanExercise(pe.id);
-            paintExercises();
-          }
-        }, '✕'),
+        h('div', { class: 'row', style: 'gap:4px' }, [
+          upBtn,
+          downBtn,
+          h('button', {
+            class: 'btn btn-danger btn-sm',
+            onClick: async () => {
+              const ok = await confirmDialog(t('plan.removeExercise', { name: ex.name }), { confirmText: t('common.delete') });
+              if (!ok) return;
+              await app.repo.deletePlanExercise(pe.id);
+              paintExercises();
+            }
+          }, '✕'),
+        ]),
       ]));
-    }
+    });
   }
   await paintExercises();
 
