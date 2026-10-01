@@ -210,8 +210,14 @@ async function openEditDay(root, app, plan, day) {
   }
 
   async function paintExercises() {
-    clear(exWrap);
+    // Preservar la posición de scroll al repintar la lista (reordenar/borrar/
+    // agrupar). Se lee ANTES de tocar el DOM y se restaura tras reconstruir, para
+    // que el usuario no "salte" arriba y pierda de vista el ejercicio que movía.
+    const prevScroll = window.scrollY;
+    // Cargar los datos ANTES de vaciar, para minimizar el tiempo en que la lista
+    // está vacía (que es lo que provoca el salto de scroll).
     const items = await app.repo.listPlanExercises(day.id);
+    clear(exWrap);
     if (items.length === 0) {
       exWrap.appendChild(h('div', { class: 'empty' }, t('plan.addExercisesBelow')));
     }
@@ -274,6 +280,9 @@ async function openEditDay(root, app, plan, day) {
         h('div', { class: 'pe-actions' }, [...groupBtns, upBtn, downBtn, delBtn]),
       ]));
     });
+    // Restaurar la posición de scroll previa (reordenar no debe saltar arriba).
+    // Se hace en el siguiente frame para que el layout ya esté recalculado.
+    requestAnimationFrame(() => window.scrollTo(0, prevScroll));
     // Tras repintar los ejercicios, recalcular el aviso de duración (punto 2).
     paintDurationNotice();
   }

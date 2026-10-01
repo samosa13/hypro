@@ -39,18 +39,19 @@ const TABS = [
 let current = 'train';
 
 function renderChrome() {
-  // Topbar
-  const existingBar = document.querySelector('.topbar');
-  if (existingBar) existingBar.remove();
   const existingTab = document.querySelector('.tabbar');
   if (existingTab) existingTab.remove();
 
-  const split = APP.logoSplitIndex ?? Math.ceil(APP.name.length / 2);
-  const topbar = h('div', { class: 'topbar' }, [
-    h('h1', { html: `${APP.name.slice(0, split)}<span class="accent">${APP.name.slice(split)}</span>` }),
-    h('div', { class: 'sub' }, APP.tagline),
-  ]);
-  document.body.insertBefore(topbar, document.body.firstChild);
+  // La topbar (Hypro) es estática: se crea UNA sola vez y permanece fija. No se
+  // recrea en cada navegación (evita parpadeo y mantiene la barra estable).
+  if (!document.querySelector('.topbar')) {
+    const split = APP.logoSplitIndex ?? Math.ceil(APP.name.length / 2);
+    const topbar = h('div', { class: 'topbar' }, [
+      h('h1', { html: `${APP.name.slice(0, split)}<span class="accent">${APP.name.slice(split)}</span>` }),
+      h('div', { class: 'sub' }, APP.tagline),
+    ]);
+    document.body.insertBefore(topbar, document.body.firstChild);
+  }
 
   const tabbar = h('div', { class: 'tabbar' },
     TABS.map((tab) =>
