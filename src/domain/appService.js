@@ -384,6 +384,37 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       return currentPosition(sessionsDone, plan.daysPerWeek);
     },
 
+    /**
+     * Días del plan ya registrados en la SEMANA EFECTIVA EN CURSO (F1). Se usa
+     * para avisar (no bloquear) si el usuario va a repetir un día ya hecho esta
+     * semana. La semana en curso = las últimas `sessionsDone % dpw` sesiones
+     * válidas del plan, en orden cronológico por fecha real.
+     * @returns {Promise<Set<string>>} conjunto de planDayId ya hechos esta semana
+     */
+    async currentWeekPlanDayIds(plan) {
+      const dpw = Math.max(1, plan.daysPerWeek);
+      const sessionsDone = await repo.countSessions(plan.id);
+      const inWeek = sessionsDone % dpw; // sesiones de la semana en curso (0..dpw-1)
+      if (inWeek === 0) return new Set(); // semana recién empezada: nada hecho aún
+      const valid = (await repo.listValidSessions(userId))
+        .filter((s) => s.planId === plan.id)
+        // Orden cronológico con desempate estable por id: evita que sesiones con
+        // el mismo startedAt (p.ej. restauradas de un backup) elijan mal la
+        // ventana de "semana en curso" (peer review F1 #1).
+        .sort((a, b) => (new Date(a.startedAt) - new Date(b.startedAt)) || String(a.id).localeCompare(String(b.id)));
+      // Las últimas `inWeek` sesiones son las de la semana en curso.
+      const current = valid.slice(valid.length - inWeek);
+      return new Set(current.map((s) => s.planDayId).filter(Boolean));
+    },
+
+    /** El día del plan SUGERIDO para hoy (siguiente de la secuencia). F1. */
+    async suggestedDay(plan) {
+      const days = (await repo.listPlanDays(plan.id)).sort((a, b) => a.order - b.order);
+      if (days.length === 0) return null;
+      const { dayInWeek } = await this.currentPosition(plan);
+      return days[(dayInWeek - 1) % days.length];
+    },
+
     /** Resumen para la pantalla de progreso. */
     async progressSummary() {
       const settings = await repo.getSettings(userId);

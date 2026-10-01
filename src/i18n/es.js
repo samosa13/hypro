@@ -36,6 +36,8 @@ export default {
   // --- Entrenar ---
   'train.needPlan': 'Crea tu plan primero (pestaña Plan).',
   'train.todayTrain': 'Toca entrenar hoy',
+  'train.chooseDay': '¿Qué día entrenas hoy? (★ = el que toca)',
+  'train.dayAlreadyDone': 'Ya hiciste "{name}" esta semana. Puedes repetirlo, pero no es lo que toca.',
   'train.dayNoExercises': 'Este día no tiene ejercicios. Añádelos en Plan.',
   'train.start': '▶ Empezar sesión',
   'train.finish': '✓ Terminar sesión',

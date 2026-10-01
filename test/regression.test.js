@@ -862,6 +862,63 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(adh).toEqual({ plannedCount: 0, doneCount: 0, skipped: [] });
   });
 
+  // --- F1: elegir día al entrenar (sugerencia + días hechos esta semana) ---
+
+  it('suggestedDay sigue la secuencia según sesiones hechas', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    // Sin sesiones: sugiere el día 1.
+    expect((await app.suggestedDay(plan)).id).toBe(days[0].id);
+    // Tras 1 sesión: sugiere el día 2.
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(s.id);
+    expect((await app.suggestedDay(plan)).id).toBe(days[1].id);
+  });
+
+  it('currentWeekPlanDayIds devuelve los días ya hechos en la semana en curso', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    // Semana recién empezada: nada hecho.
+    expect([...(await app.currentWeekPlanDayIds(plan))]).toEqual([]);
+
+    // Hago el día 1.
+    const s1 = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s1.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(s1.id);
+    expect([...(await app.currentWeekPlanDayIds(plan))]).toEqual([days[0].id]);
+
+    // Hago el día 2.
+    const s2 = await app.startSession(plan, days[1]);
+    await app.logSet({ sessionId: s2.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(s2.id);
+    const done = await app.currentWeekPlanDayIds(plan);
+    expect(done.has(days[0].id)).toBe(true);
+    expect(done.has(days[1].id)).toBe(true);
+  });
+
+  it('al cerrar la semana efectiva, currentWeekPlanDayIds se vacía (nueva semana)', async () => {
+    const { plan, press, days } = await setupPlan(2);
+    for (const d of days) {
+      const s = await app.startSession(plan, d);
+      await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+      await app.finishSession(s.id);
+    }
+    // 2 sesiones con dpw=2 → semana completa → la siguiente empieza vacía.
+    expect([...(await app.currentWeekPlanDayIds(plan))]).toEqual([]);
+  });
+
+  it('elegir un día distinto al sugerido NO rompe la secuencia (se registra el día elegido)', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    // Sugerido es día 1, pero elijo entrenar el día 3.
+    expect((await app.suggestedDay(plan)).id).toBe(days[0].id);
+    const s = await app.startSession(plan, days[2]); // elijo D3
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(s.id);
+    // La sesión guarda el día REAL elegido (D3), no el sugerido.
+    expect((await repository.getSession(s.id)).planDayId).toBe(days[2].id);
+    // D3 queda marcado como hecho esta semana.
+    expect((await app.currentWeekPlanDayIds(plan)).has(days[2].id)).toBe(true);
+  });
+
   // --- Duración estimada y viabilidad del día (punto 2) ---
 
   it('dayDurationEstimate usa el objetivo del día y avisa si no cabe', async () => {

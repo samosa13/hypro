@@ -81,80 +81,128 @@ export async function renderTrain(root, app) {
 
   const sessionsDone = await app.repo.countSessions(plan.id);
   const pos = positionLabel(sessionsDone, plan.daysPerWeek);
-  const days = await app.repo.listPlanDays(plan.id);
-  const { dayInWeek } = await app.currentPosition(plan);
-  // Día que toca: indexar por posición ordenada, robusto ante `order` no
-  // contiguo tras editar/borrar días (peer review #6).
-  const ordered = [...days].sort((a, b) => a.order - b.order);
-  const todayDay = ordered.length ? ordered[(dayInWeek - 1) % ordered.length] : null;
+  const days = (await app.repo.listPlanDays(plan.id)).sort((a, b) => a.order - b.order);
 
-  screen.appendChild(h('div', { class: 'banner week' }, pos));
-  screen.appendChild(h('div', { class: 'card row-between' }, [
-    h('div', {}, [
-      h('div', { class: 'muted' }, t('train.todayTrain')),
-      h('div', { style: 'font-weight:800;font-size:20px' }, todayDay ? todayDay.name : '—'),
-    ]),
-  ]));
-
-  if (!todayDay) { root.appendChild(screen); return; }
-
-  const planExercises = await app.repo.listPlanExercises(todayDay.id);
-  if (planExercises.length === 0) {
+  if (days.length === 0) {
+    screen.appendChild(h('div', { class: 'banner week' }, pos));
     screen.appendChild(h('div', { class: 'empty' }, t('train.dayNoExercises')));
     root.appendChild(screen);
     return;
   }
 
-  // Viabilidad del día (punto 2): "hoy tengo X min". Prefijado con el objetivo
-  // del día; editable para hacer override puntual sin tocar el plan. Si la
-  // estimación no cabe, se avisa con sugerencias (no bloquea: el usuario decide).
-  let overrideMinutes = todayDay.targetDurationMin ?? null;
-  const timeInput = h('input', {
-    type: 'number', min: '0', style: 'width:90px',
-    value: overrideMinutes != null ? String(overrideMinutes) : '',
-    placeholder: t('train.timeTodayPh'),
-  });
-  const fitNotice = h('div', { style: 'margin-top:8px' });
-  const timeCard = h('div', { class: 'card' }, [
-    h('div', { class: 'row-between' }, [
-      h('span', {}, t('train.timeToday')),
-      h('div', { class: 'row', style: 'gap:6px;align-items:center' }, [timeInput, h('span', { class: 'muted' }, t('train.minutes'))]),
-    ]),
-    fitNotice,
-  ]);
-  screen.appendChild(timeCard);
+  // Día SUGERIDO (siguiente de la secuencia) y días ya hechos esta semana
+  // efectiva (para el aviso de duplicado). El usuario puede ELEGIR cualquier día
+  // (F1): la app sugiere, no impone.
+  const suggested = await app.suggestedDay(plan);
+  const doneThisWeek = await app.currentWeekPlanDayIds(plan);
+  let selectedDay = suggested ?? days[0];
 
-  async function paintFit() {
-    clear(fitNotice);
-    const mins = timeInput.value === '' ? null : Math.max(0, parseInt(timeInput.value) || 0);
-    const est = await app.dayDurationEstimate(todayDay.id, mins);
-    const line = est.availableMinutes > 0
-      ? t('train.durationEstimateVs', { est: est.estimatedMinutes, avail: est.availableMinutes })
-      : t('train.durationEstimate', { est: est.estimatedMinutes });
-    fitNotice.appendChild(h('div', { class: 'muted', style: 'font-weight:700' }, `⏱ ${line}`));
-    if (!est.fits && est.availableMinutes > 0) {
-      fitNotice.appendChild(h('div', {
-        style: 'margin-top:6px;padding:10px 12px;border-radius:10px;background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
-      }, t('train.durationOver', { over: est.overByMinutes })));
-      for (const sgg of est.suggestions) {
-        fitNotice.appendChild(h('div', { class: 'muted', style: 'font-size:13px;margin-top:4px' }, `• ${trainCutText(sgg)}`));
-      }
-    }
-  }
-  timeInput.addEventListener('input', paintFit);
-  await paintFit();
+  screen.appendChild(h('div', { class: 'banner week' }, pos));
 
-  const startBtn = h('button', { class: 'btn', onClick: start }, t('train.start'));
-  screen.appendChild(startBtn);
+  // Selector de día: una fila de "chips", el sugerido marcado. Al tocar uno se
+  // selecciona y se repinta la zona del día (viabilidad + empezar).
+  const dayPicker = h('div', { class: 'day-picker' });
+  screen.appendChild(h('div', { class: 'card' }, [
+    h('div', { class: 'muted', style: 'margin-bottom:8px' }, t('train.chooseDay')),
+    dayPicker,
+  ]));
+
+  // Zona que depende del día elegido (se repinta al cambiar de día).
+  const dayZone = h('div', {});
+  screen.appendChild(dayZone);
   root.appendChild(screen);
 
-  async function start() {
-    initAudio(); // habilita el sonido tras gesto del usuario
-    const settings = await app.repo.getSettings(app.userId);
-    const unit = settings.unit === 'lb' ? 'lb' : 'kg';
-    const session = await app.startSession(plan, todayDay);
-    renderActiveSession(root, app, { plan, day: todayDay, planExercises, session, pos, unit });
+  function paintDayPicker() {
+    clear(dayPicker);
+    for (const d of days) {
+      const isSel = d.id === selectedDay.id;
+      const isSuggested = suggested && d.id === suggested.id;
+      const alreadyDone = doneThisWeek.has(d.id);
+      const chip = h('button', {
+        class: `day-chip${isSel ? ' active' : ''}${alreadyDone ? ' done' : ''}`,
+        onClick: () => { selectedDay = d; paintDayPicker(); paintDayZone(); },
+      }, [
+        h('span', {}, d.name),
+        // Marca visual: ✓ si ya se hizo esta semana y/o ★ si es el sugerido.
+        // Si el sugerido coincide con uno ya hecho, se muestran AMBAS (peer review F1 #2).
+        (alreadyDone || isSuggested)
+          ? h('span', { class: 'chip-mark' }, `${alreadyDone ? ' ✓' : ''}${isSuggested ? ' ★' : ''}`)
+          : null,
+      ]);
+      dayPicker.appendChild(chip);
+    }
   }
+
+  // Token de render: si se cambia de día mientras una pintura async está en
+  // curso, la obsoleta se descarta y solo "gana" la última (peer review F1 #3).
+  let dayZoneToken = 0;
+  async function paintDayZone() {
+    const myToken = ++dayZoneToken;
+    const planExercises = await app.repo.listPlanExercises(selectedDay.id);
+    if (myToken !== dayZoneToken) return; // llegó otra selección después: abortar
+    clear(dayZone);
+    if (planExercises.length === 0) {
+      dayZone.appendChild(h('div', { class: 'empty' }, t('train.dayNoExercises')));
+      return;
+    }
+
+    // Aviso (no bloqueante) si el día elegido YA se registró esta semana efectiva.
+    if (doneThisWeek.has(selectedDay.id)) {
+      dayZone.appendChild(h('div', {
+        class: 'card', style: 'background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
+      }, `⚠ ${t('train.dayAlreadyDone', { name: selectedDay.name })}`));
+    }
+
+    // Viabilidad del día (punto 2): "hoy tengo X min".
+    const overrideMinutes = selectedDay.targetDurationMin ?? null;
+    const timeInput = h('input', {
+      type: 'number', min: '0', style: 'width:90px',
+      value: overrideMinutes != null ? String(overrideMinutes) : '',
+      placeholder: t('train.timeTodayPh'),
+    });
+    const fitNotice = h('div', { style: 'margin-top:8px' });
+    dayZone.appendChild(h('div', { class: 'card' }, [
+      h('div', { class: 'row-between' }, [
+        h('span', {}, t('train.timeToday')),
+        h('div', { class: 'row', style: 'gap:6px;align-items:center' }, [timeInput, h('span', { class: 'muted' }, t('train.minutes'))]),
+      ]),
+      fitNotice,
+    ]));
+
+    async function paintFit() {
+      clear(fitNotice);
+      const mins = timeInput.value === '' ? null : Math.max(0, parseInt(timeInput.value) || 0);
+      const est = await app.dayDurationEstimate(selectedDay.id, mins);
+      const line = est.availableMinutes > 0
+        ? t('train.durationEstimateVs', { est: est.estimatedMinutes, avail: est.availableMinutes })
+        : t('train.durationEstimate', { est: est.estimatedMinutes });
+      fitNotice.appendChild(h('div', { class: 'muted', style: 'font-weight:700' }, `⏱ ${line}`));
+      if (!est.fits && est.availableMinutes > 0) {
+        fitNotice.appendChild(h('div', {
+          style: 'margin-top:6px;padding:10px 12px;border-radius:10px;background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
+        }, t('train.durationOver', { over: est.overByMinutes })));
+        for (const sgg of est.suggestions) {
+          fitNotice.appendChild(h('div', { class: 'muted', style: 'font-size:13px;margin-top:4px' }, `• ${trainCutText(sgg)}`));
+        }
+      }
+    }
+    timeInput.addEventListener('input', paintFit);
+    await paintFit();
+
+    dayZone.appendChild(h('button', {
+      class: 'btn', style: 'margin-top:8px',
+      onClick: async () => {
+        initAudio(); // habilita el sonido tras gesto del usuario
+        const settings = await app.repo.getSettings(app.userId);
+        const unit = settings.unit === 'lb' ? 'lb' : 'kg';
+        const session = await app.startSession(plan, selectedDay);
+        renderActiveSession(root, app, { plan, day: selectedDay, planExercises, session, pos, unit });
+      },
+    }, t('train.start')));
+  }
+
+  paintDayPicker();
+  await paintDayZone();
 }
 
 async function renderActiveSession(root, app, ctx) {
