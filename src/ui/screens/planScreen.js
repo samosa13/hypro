@@ -12,6 +12,14 @@ import { kgToDisplay, displayToKg, unitLabel, formatDuration } from '../../domai
 import { normalizeTracking } from '../../domain/personalRecord.js';
 import { matchesSearch } from '../../domain/search.js';
 
+/** Traduce una sugerencia de recorte de duración (punto 2) a texto para la UI. */
+function cutText(s) {
+  if (s.kind === 'dropSet') return t('plan.cutDropSet', { saved: s.savedMin, after: s.afterMinutes });
+  if (s.kind === 'trimRest') return t('plan.cutTrimRest', { saved: s.savedMin, after: s.afterMinutes });
+  if (s.kind === 'dropExercises') return t('plan.cutDropExercises', { count: s.count });
+  return '';
+}
+
 /** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
 function repRangeLabel(pe) {
   const r = pe.repMin > 0 && pe.repMax > 0 ? { min: pe.repMin, max: pe.repMax } : deriveRepRange(pe.targetReps);
@@ -148,15 +156,30 @@ async function openEditDay(root, app, plan, day) {
   const screen = h('div', { class: 'screen' });
   screen.appendChild(h('h2', {}, t('plan.editDay', { order: day.order })));
 
-  // Nombre libre del día
+  // Nombre del día + tiempo disponible objetivo (punto 2).
   const dayName = h('input', { value: day.name, placeholder: t('plan.dayNamePh') });
+  const dayDuration = h('input', { type: 'number', min: '0', value: String(day.targetDurationMin ?? ''), placeholder: t('plan.dayDurationPh') });
   screen.appendChild(h('div', { class: 'card' }, [
     h('label', {}, t('plan.dayName')), dayName,
+    h('label', { style: 'margin-top:10px' }, t('plan.dayDuration')), dayDuration,
+    h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.dayDurationHint')),
     h('button', {
       class: 'btn btn-ghost btn-sm', style: 'margin-top:10px',
-      onClick: async () => { await app.repo.savePlanDay({ ...day, name: dayName.value.trim() || day.name }); toast(t('plan.nameSaved')); }
+      onClick: async () => {
+        // Si el campo está vacío, no se fija objetivo (no sobreescribir con 0).
+        const raw = dayDuration.value.trim();
+        const mins = raw === '' ? null : Math.max(0, parseInt(raw) || 0);
+        await app.repo.savePlanDay({ ...day, name: dayName.value.trim() || day.name, targetDurationMin: mins });
+        day.targetDurationMin = mins; // mantener en memoria para el aviso
+        toast(t('plan.nameSaved'));
+        paintDurationNotice();
+      }
     }, t('plan.saveName')),
   ]));
+
+  // Aviso de viabilidad del día (punto 2): estimación vs tiempo disponible.
+  const durationNotice = h('div', {});
+  screen.appendChild(durationNotice);
 
   // Ejercicios del día
   const exWrap = h('div', {});
@@ -165,6 +188,26 @@ async function openEditDay(root, app, plan, day) {
 
   const allExercises = await app.repo.listExercises(app.userId);
   const exMap = Object.fromEntries(allExercises.map((e) => [e.id, e]));
+
+  /** Pinta la estimación de duración del día y, si no cabe, las sugerencias. */
+  async function paintDurationNotice() {
+    clear(durationNotice);
+    const est = await app.dayDurationEstimate(day.id);
+    // Siempre mostramos la duración estimada; el aviso de "no cabe" solo si hay objetivo.
+    const line = est.availableMinutes > 0
+      ? t('plan.durationEstimateVs', { est: est.estimatedMinutes, avail: est.availableMinutes })
+      : t('plan.durationEstimate', { est: est.estimatedMinutes });
+    const children = [h('div', { class: 'muted', style: 'font-weight:700' }, `⏱ ${line}`)];
+    if (!est.fits && est.availableMinutes > 0) {
+      children.push(h('div', {
+        style: 'margin-top:6px;padding:10px 12px;border-radius:10px;background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
+      }, t('plan.durationOver', { over: est.overByMinutes })));
+      for (const s of est.suggestions) {
+        children.push(h('div', { class: 'muted', style: 'font-size:13px;margin-top:4px' }, `• ${cutText(s)}`));
+      }
+    }
+    durationNotice.appendChild(h('div', { class: 'card' }, children));
+  }
 
   async function paintExercises() {
     clear(exWrap);
@@ -231,6 +274,8 @@ async function openEditDay(root, app, plan, day) {
         ]),
       ]));
     });
+    // Tras repintar los ejercicios, recalcular el aviso de duración (punto 2).
+    paintDurationNotice();
   }
   await paintExercises();
 

@@ -45,6 +45,14 @@ function setBrief(s, tracking, unit) {
   return `${kgToDisplay(s.weight, unit)}×${s.reps}`;
 }
 
+/** Traduce una sugerencia de recorte de duración (punto 2) para el aviso de Entrenar. */
+function trainCutText(s) {
+  if (s.kind === 'dropSet') return t('train.cutDropSet', { saved: s.savedMin, after: s.afterMinutes });
+  if (s.kind === 'trimRest') return t('train.cutTrimRest', { saved: s.savedMin, after: s.afterMinutes });
+  if (s.kind === 'dropExercises') return t('train.cutDropExercises', { count: s.count });
+  return '';
+}
+
 // Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
 // cancelarlo si el usuario navega fuera de Entrenar (peer review #9).
 let activeRestTimer = null;
@@ -96,6 +104,45 @@ export async function renderTrain(root, app) {
     root.appendChild(screen);
     return;
   }
+
+  // Viabilidad del día (punto 2): "hoy tengo X min". Prefijado con el objetivo
+  // del día; editable para hacer override puntual sin tocar el plan. Si la
+  // estimación no cabe, se avisa con sugerencias (no bloquea: el usuario decide).
+  let overrideMinutes = todayDay.targetDurationMin ?? null;
+  const timeInput = h('input', {
+    type: 'number', min: '0', style: 'width:90px',
+    value: overrideMinutes != null ? String(overrideMinutes) : '',
+    placeholder: t('train.timeTodayPh'),
+  });
+  const fitNotice = h('div', { style: 'margin-top:8px' });
+  const timeCard = h('div', { class: 'card' }, [
+    h('div', { class: 'row-between' }, [
+      h('span', {}, t('train.timeToday')),
+      h('div', { class: 'row', style: 'gap:6px;align-items:center' }, [timeInput, h('span', { class: 'muted' }, t('train.minutes'))]),
+    ]),
+    fitNotice,
+  ]);
+  screen.appendChild(timeCard);
+
+  async function paintFit() {
+    clear(fitNotice);
+    const mins = timeInput.value === '' ? null : Math.max(0, parseInt(timeInput.value) || 0);
+    const est = await app.dayDurationEstimate(todayDay.id, mins);
+    const line = est.availableMinutes > 0
+      ? t('train.durationEstimateVs', { est: est.estimatedMinutes, avail: est.availableMinutes })
+      : t('train.durationEstimate', { est: est.estimatedMinutes });
+    fitNotice.appendChild(h('div', { class: 'muted', style: 'font-weight:700' }, `⏱ ${line}`));
+    if (!est.fits && est.availableMinutes > 0) {
+      fitNotice.appendChild(h('div', {
+        style: 'margin-top:6px;padding:10px 12px;border-radius:10px;background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
+      }, t('train.durationOver', { over: est.overByMinutes })));
+      for (const sgg of est.suggestions) {
+        fitNotice.appendChild(h('div', { class: 'muted', style: 'font-size:13px;margin-top:4px' }, `• ${trainCutText(sgg)}`));
+      }
+    }
+  }
+  timeInput.addEventListener('input', paintFit);
+  await paintFit();
 
   const startBtn = h('button', { class: 'btn', onClick: start }, t('train.start'));
   screen.appendChild(startBtn);

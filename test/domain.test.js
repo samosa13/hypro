@@ -10,6 +10,7 @@ import { findPlateaus } from '../src/domain/plateau.js';
 import { suggestNext } from '../src/domain/progression.js';
 import { formatDuration } from '../src/domain/units.js';
 import { normalizeText, matchesSearch } from '../src/domain/search.js';
+import { estimateDaySeconds, assessFit, suggestCuts } from '../src/domain/duration.js';
 
 describe('personalRecord · 1RM y PR', () => {
   it('UT-PR-06 · Epley: peso*(1+reps/30)', () => {
@@ -165,6 +166,81 @@ describe('search · normalización y filtrado multi-campo', () => {
   it('término vacío casa siempre (no filtra)', () => {
     expect(matchesSearch('', ['lo que sea'])).toBe(true);
     expect(matchesSearch('   ', ['lo que sea'])).toBe(true);
+  });
+});
+
+describe('duration · estimación de duración y viabilidad (punto 2)', () => {
+  const settings = { secondsPerSet: 40 };
+
+  it('estima un ejercicio suelto: sets×ejecución + descansos (menos el final)', () => {
+    // 1 ejercicio, 3 series, descanso 90s, 40s/serie.
+    // work = 3×40 = 120. rest = 3×90 − 90 (final) = 180. total = 300s.
+    const pe = [{ exerciseId: 'e1', targetSets: 3, restSeconds: 90, order: 1 }];
+    const est = estimateDaySeconds(pe, { e1: 'weight_reps' }, settings);
+    expect(est.workSeconds).toBe(120);
+    expect(est.restSeconds).toBe(180);
+    expect(est.totalSeconds).toBe(300);
+  });
+
+  it('ejercicio de tiempo usa su targetDurationSeconds como ejecución', () => {
+    // Plancha: 3 series de 60s, descanso 30s. work = 180, rest = 3×30−30 = 60.
+    const pe = [{ exerciseId: 'p', targetSets: 3, restSeconds: 30, targetDurationSeconds: 60, order: 1 }];
+    const est = estimateDaySeconds(pe, { p: 'time' }, settings);
+    expect(est.workSeconds).toBe(180);
+    expect(est.totalSeconds).toBe(240);
+  });
+
+  it('superserie: descanso solo al cerrar vuelta, no entre miembros (D17)', () => {
+    // 2 ejercicios en grupo, 3 vueltas, 40s/serie, descanso 90s del último.
+    // work = 3×(40+40) = 240. rest = 3×90 − 90 = 180. total = 420.
+    const pe = [
+      { exerciseId: 'a', groupId: 'g1', targetSets: 3, restSeconds: 90, order: 1 },
+      { exerciseId: 'b', groupId: 'g1', targetSets: 3, restSeconds: 90, order: 2 },
+    ];
+    const est = estimateDaySeconds(pe, { a: 'weight_reps', b: 'weight_reps' }, settings);
+    expect(est.workSeconds).toBe(240);
+    expect(est.restSeconds).toBe(180);
+    expect(est.totalSeconds).toBe(420);
+  });
+
+  it('assessFit respeta el margen de tolerancia de 2 min', () => {
+    expect(assessFit(60 * 60, 60).fits).toBe(true);        // justo
+    expect(assessFit(62 * 60, 60).fits).toBe(true);        // 2 min de más → tolerado
+    expect(assessFit(65 * 60, 60).fits).toBe(false);       // 5 min de más → no cabe
+    expect(assessFit(90 * 60, 0).fits).toBe(true);         // sin objetivo → siempre cabe
+    expect(assessFit(65 * 60, 60).overByMinutes).toBe(5);
+  });
+
+  it('suggestCuts no sugiere nada si el día cabe', () => {
+    const pe = [{ exerciseId: 'e1', targetSets: 3, restSeconds: 60, order: 1 }];
+    expect(suggestCuts({ planExercises: pe, trackingById: { e1: 'weight_reps' }, settings, availableMinutes: 60 })).toEqual([]);
+  });
+
+  it('suggestCuts propone solo recortes que SÍ hacen caber el día (peer review #3)', () => {
+    // Día que se pasa POCO: 3 ejercicios, 4 series, descanso 120s.
+    // base ≈ 3×(4×40) + (3×4×120 − 120) = 480 + 1320 = 1800s = 30 min.
+    // Con objetivo 26 min (+2 tolerancia = 28): quitar una serie o bajar
+    // descansos a 60 lo deja por debajo → ambas sugerencias aplican.
+    const pe = Array.from({ length: 3 }, (_, i) => ({ exerciseId: 'e' + i, targetSets: 4, restSeconds: 120, order: i + 1 }));
+    const trackingById = Object.fromEntries(pe.map((p) => [p.exerciseId, 'weight_reps']));
+    const cuts = suggestCuts({ planExercises: pe, trackingById, settings, availableMinutes: 26 });
+    expect(cuts.length).toBeGreaterThan(0);
+    // Cada sugerencia de recorte-con-ahorro deja el día dentro del objetivo+2.
+    for (const c of cuts) {
+      if (c.afterMinutes != null) expect(c.afterMinutes).toBeLessThanOrEqual(28);
+    }
+  });
+
+  it('suggestCuts no ofrece un recorte que no hace caber (día que se pasa mucho)', () => {
+    // Día enorme con objetivo minúsculo: ni quitar una serie ni bajar descansos
+    // lo hace caber, así que esas sugerencias NO se ofrecen (serían engañosas).
+    const pe = Array.from({ length: 6 }, (_, i) => ({ exerciseId: 'e' + i, targetSets: 4, restSeconds: 120, order: i + 1 }));
+    const trackingById = Object.fromEntries(pe.map((p) => [p.exerciseId, 'weight_reps']));
+    const cuts = suggestCuts({ planExercises: pe, trackingById, settings, availableMinutes: 10 });
+    // dropSet/trimRest por sí solos no bastan → no aparecen; sí puede aparecer
+    // dropExercises (dejar varias unidades fuera).
+    expect(cuts.some((c) => c.kind === 'dropSet')).toBe(false);
+    expect(cuts.some((c) => c.kind === 'trimRest')).toBe(false);
   });
 });
 

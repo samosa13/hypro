@@ -58,6 +58,7 @@ function makeFakeRepo() {
     async listPlanExercises(planDayId) {
       return (db.planExercises ?? []).filter((pe) => pe.planDayId === planDayId).sort((a, b) => a.order - b.order);
     },
+    async getPlanDay(dayId) { return (db.planDays ?? []).find((d) => d.id === dayId) ?? null; },
     async discardSessionIfEmpty(id) {
       const s = db.sessions.find((x) => x.id === id);
       if (s && (s.setCount ?? 0) === 0) {

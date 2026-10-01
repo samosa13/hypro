@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS = {
   inactivityThresholdDays: 4,
   unit: 'kg',                // unidad de PESO de presentación (kg|lb); se guarda siempre en kg (B11)
   weeklyVolumeTarget: 12,    // objetivo de series/semana por grupo muscular (C13); semáforo contra este valor
+  secondsPerSet: 40,         // tiempo estimado de EJECUCIÓN de una serie de peso/reps (para estimar duración de la sesión, punto 2). Las de tiempo usan su targetDurationSeconds.
   // gymStartDate y planStartDate se fijan al usar la app la primera vez
 };
 

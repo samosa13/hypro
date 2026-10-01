@@ -711,6 +711,38 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Estimación de duración y viabilidad de un día del plan (punto 2). Combina
+     * los planExercises del día con el tiempo estimado por serie (ajuste global)
+     * y el tiempo disponible, y devuelve si cabe + sugerencias de recorte.
+     *
+     * El tiempo disponible se toma, por orden: el `overrideMinutes` (lo que el
+     * usuario declara al empezar hoy), si no el `targetDurationMin` guardado en
+     * el día, si no 0 (sin objetivo → siempre "cabe").
+     * @param {string} planDayId
+     * @param {number|null} [overrideMinutes] tiempo disponible declarado ahora
+     * @returns {Promise<{estimatedMinutes, availableMinutes, fits, overByMinutes, suggestions:Array}>}
+     */
+    async dayDurationEstimate(planDayId, overrideMinutes = null) {
+      const { estimateDaySeconds, assessFit, suggestCuts } = await import('./duration.js');
+      const planExercises = await repo.listPlanExercises(planDayId);
+      const day = await repo.getPlanDay?.(planDayId);
+      const settings = await repo.getSettings(userId);
+      const exercises = await repo.listExercises(userId);
+      const trackingById = Object.fromEntries(exercises.map((e) => [e.id, normalizeTracking(e.tracking)]));
+
+      const availableMinutes = Number.isFinite(overrideMinutes) && overrideMinutes != null
+        ? overrideMinutes
+        : (day?.targetDurationMin ?? 0);
+
+      const est = estimateDaySeconds(planExercises, trackingById, settings);
+      const fit = assessFit(est.totalSeconds, availableMinutes);
+      const suggestions = availableMinutes > 0 && !fit.fits
+        ? suggestCuts({ planExercises, trackingById, settings, availableMinutes })
+        : [];
+      return { ...fit, suggestions };
+    },
+
+    /**
      * Cierra una sesión: marca su fin y PERSISTE la adherencia (ids de los
      * ejercicios planificados que quedaron sin hacer, más plannedCount/doneCount)
      * como SNAPSHOT del momento de cierre. No penaliza nada: es informativa.

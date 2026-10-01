@@ -20,6 +20,7 @@ export async function renderSettings(root, app) {
   const night = h('input', { type: 'checkbox' }); night.checked = s.trainsAtNight !== false;
   const inactivity = h('input', { type: 'number', min: '1', value: String(s.inactivityThresholdDays) });
   const volTarget = h('input', { type: 'number', min: '0', value: String(s.weeklyVolumeTarget ?? 12) });
+  const secsPerSet = h('input', { type: 'number', min: '5', value: String(s.secondsPerSet ?? 40) });
   const gymStart = h('input', { type: 'date', value: (s.gymStartDate ?? '').slice(0, 10) });
 
   // Selector de idioma (i18n). Solo español disponible hoy, pero funcional:
@@ -45,6 +46,7 @@ export async function renderSettings(root, app) {
     h('label', {}, t('settings.language')), langSel,
     h('label', {}, t('settings.unit')), unitSel,
     h('label', {}, t('settings.weeklyVolumeTarget')), volTarget,
+    h('label', {}, t('settings.secondsPerSet')), secsPerSet,
     h('div', { class: 'row-between', style: 'margin-top:14px' }, [h('span', {}, t('settings.sound')), sound]),
     h('div', { class: 'row-between', style: 'margin-top:10px' }, [h('span', {}, t('settings.night')), night]),
     h('button', {
@@ -62,6 +64,7 @@ export async function renderSettings(root, app) {
           locale: newLocale,
           unit: unitSel.value === 'lb' ? 'lb' : 'kg',
           weeklyVolumeTarget: Math.max(0, parseInt(volTarget.value) || 0),
+          secondsPerSet: Math.max(5, parseInt(secsPerSet.value) || 40),
           // El <input type=date> da "YYYY-MM-DD"; lo interpretamos como fecha
           // LOCAL (no UTC) para que no se desfase un día en husos al oeste (#12).
           gymStartDate: gymStart.value ? localDateToISO(gymStart.value) : s.gymStartDate,

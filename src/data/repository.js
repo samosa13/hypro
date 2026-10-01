@@ -74,6 +74,10 @@ export const repository = {
     await db.planDays.put(record);
     return record;
   },
+  /** Un día del plan por id (para leer su tiempo disponible, punto 2). */
+  async getPlanDay(dayId) {
+    return db.planDays.get(dayId);
+  },
   async deletePlanDay(dayId) {
     await db.transaction('rw', db.planDays, db.planExercises, async () => {
       await db.planExercises.where('planDayId').equals(dayId).delete();

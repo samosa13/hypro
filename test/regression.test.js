@@ -862,6 +862,39 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(adh).toEqual({ plannedCount: 0, doneCount: 0, skipped: [] });
   });
 
+  // --- Duración estimada y viabilidad del día (punto 2) ---
+
+  it('dayDurationEstimate usa el objetivo del día y avisa si no cabe', async () => {
+    const { day } = await setupDay3Ex(); // 3 ejercicios, 3 series c/u, descanso 90s
+    // Fijar objetivo de 10 minutos: claramente no cabe.
+    await repository.savePlanDay({ ...(await repository.getPlanDay(day.id)), targetDurationMin: 10 });
+
+    const est = await app.dayDurationEstimate(day.id);
+    expect(est.availableMinutes).toBe(10);
+    expect(est.estimatedMinutes).toBeGreaterThan(10);
+    expect(est.fits).toBe(false);
+    expect(est.suggestions.length).toBeGreaterThan(0);
+  });
+
+  it('dayDurationEstimate acepta override puntual del tiempo disponible', async () => {
+    const { day } = await setupDay3Ex();
+    await repository.savePlanDay({ ...(await repository.getPlanDay(day.id)), targetDurationMin: 10 });
+
+    // Override generoso: hoy tengo 120 min → cabe de sobra.
+    const est = await app.dayDurationEstimate(day.id, 120);
+    expect(est.availableMinutes).toBe(120);
+    expect(est.fits).toBe(true);
+    expect(est.suggestions).toEqual([]);
+  });
+
+  it('sin objetivo de tiempo, el día siempre "cabe" (solo informa duración)', async () => {
+    const { day } = await setupDay3Ex(); // sin targetDurationMin
+    const est = await app.dayDurationEstimate(day.id);
+    expect(est.availableMinutes).toBe(0);
+    expect(est.fits).toBe(true);
+    expect(est.estimatedMinutes).toBeGreaterThan(0);
+  });
+
   // --- D17: superseries / triseries / circuitos ---
 
   /** Monta un día con 3 ejercicios conocidos y devuelve {day, pes}. */
