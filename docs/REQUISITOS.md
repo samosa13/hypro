@@ -67,6 +67,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-42 | 2 | **Unidad de peso kg/lb** (B11): el usuario elige en Ajustes si ve los pesos en kilogramos o libras. Los pesos se **almacenan SIEMPRE en kg** (unidad canónica); la unidad es solo de presentación (se convierte al mostrar y al leer la entrada). 1RM, récords y volumen se calculan en kg; cambiar de unidad nunca recalcula ni corrompe el histórico. Helper puro `src/domain/units.js`. |
 | RF-43 | 2 | **Resumen post-sesión** (C12): al terminar una sesión válida, un overlay de cierre muestra nº de series de trabajo, volumen total movido (Σ peso×reps, en la unidad del usuario) y nº de récords logrados. Los calentamientos no cuentan. Botón Hecho vuelve a Entrenar. |
 | RF-44 | 2 | **Volumen semanal objetivo con semáforo** (C13): objetivo de series/semana por grupo muscular (configurable en Ajustes, default 12). En Progreso, cada músculo muestra una marca de objetivo y un semáforo: verde (en zona 70-130%), naranja (corto, <70%) o rojo (pasado, >130%). Un objetivo de 0 desactiva el semáforo. |
+| RF-45 | 2 | **Compartir un récord como imagen** (C14): cada récord en Progreso tiene un botón 📤 que genera una tarjeta PNG (fondo oscuro, marca Hypro, ejercicio + peso×reps + fecha) y la comparte vía `navigator.share` (móvil) o la descarga (fallback). El peso se muestra en la unidad del usuario. UI pura (canvas, sin dependencias). |
 
 ### Motivación y notificaciones
 

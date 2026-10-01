@@ -170,6 +170,10 @@ export default {
   'progress.yourRecords': 'Tus récords',
   'progress.noRecords': 'Aún no hay récords. Entrena y llegarán.',
 
+  // --- Compartir (C14) ---
+  'share.pr': 'Compartir este récord',
+  'share.downloaded': 'Imagen descargada 📥',
+
   // --- Ajustes ---
   'settings.title': 'Ajustes',
   'settings.defaultSets': 'Series por defecto',

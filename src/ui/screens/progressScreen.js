@@ -2,7 +2,7 @@
  * UI · Pantalla "Progreso" — doble métrica de tiempo + PRs + gráficas sencillas.
  * RF-30..RF-34.
  */
-import { h, clear } from '../dom.js';
+import { h, clear, toast } from '../dom.js';
 import { icon } from '../icons.js';
 import { tenureLabel } from '../../domain/gymTenure.js';
 import { positionLabel } from '../../domain/effectiveWeek.js';
@@ -10,6 +10,7 @@ import { currentStreak } from '../../domain/streak.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { t } from '../../i18n/index.js';
 import { kgToDisplay, unitLabel } from '../../domain/units.js';
+import { shareCard } from '../shareCard.js';
 
 export async function renderProgress(root, app) {
   clear(root);
@@ -134,13 +135,32 @@ export async function renderProgress(root, app) {
   } else {
     for (const pr of prs.sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))) {
       const ex = exMap[pr.exerciseId];
-      screen.appendChild(h('div', { class: 'card row' }, [
-        h('div', { class: 'ex-icon', html: icon(ex?.icon ?? 'bodyweight') }),
-        h('div', {}, [
-          h('div', { style: 'font-weight:700' }, ex?.name ?? 'Ejercicio'),
-          h('div', { class: 'pr-line' }, `${pr.repsAtBest} reps × ${kgToDisplay(pr.bestWeight, settings.unit)}${unitLabel(settings.unit)}`),
-          h('div', { class: 'faint' }, formatDate(pr.achievedAt)),
+      const exName = ex?.name ?? 'Ejercicio';
+      const weightTxt = `${kgToDisplay(pr.bestWeight, settings.unit)}${unitLabel(settings.unit)}`;
+      // Botón compartir el PR como imagen (C14).
+      const shareBtn = h('button', {
+        class: 'btn btn-ghost btn-sm', title: t('share.pr'),
+        onClick: async () => {
+          const res = await shareCard({
+            title: t('train.newRecord'),
+            headline: `${kgToDisplay(pr.bestWeight, settings.unit)} ${unitLabel(settings.unit)} × ${pr.repsAtBest}`,
+            subtitle: exName,
+            footer: formatDate(pr.achievedAt),
+            filename: `hypro-pr-${(ex?.seedKey || exName).toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`,
+          });
+          if (res === 'downloaded') toast(t('share.downloaded'));
+        },
+      }, '📤');
+      screen.appendChild(h('div', { class: 'card row-between' }, [
+        h('div', { class: 'row' }, [
+          h('div', { class: 'ex-icon', html: icon(ex?.icon ?? 'bodyweight') }),
+          h('div', {}, [
+            h('div', { style: 'font-weight:700' }, exName),
+            h('div', { class: 'pr-line' }, `${pr.repsAtBest} reps × ${weightTxt}`),
+            h('div', { class: 'faint' }, formatDate(pr.achievedAt)),
+          ]),
         ]),
+        shareBtn,
       ]));
     }
   }
