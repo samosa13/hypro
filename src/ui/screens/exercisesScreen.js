@@ -100,6 +100,12 @@ function openNewExercise(app, paint) {
   const name = h('input', { placeholder: t('ex.namePh') });
   const muscle = h('select', {}, MUSCLE_GROUPS.map((m) => h('option', { value: m }, m)));
   const equip = h('select', {}, EQUIPMENT_TYPES.map((e) => h('option', { value: e }, e)));
+  // Tipo de medición del ejercicio (D16): cómo se registra y se compara el PR.
+  const tracking = h('select', {}, [
+    h('option', { value: 'weight_reps' }, t('tracking.weight_reps')),
+    h('option', { value: 'reps_only' }, t('tracking.reps_only')),
+    h('option', { value: 'time' }, t('tracking.time')),
+  ]);
   const iconSel = h('select', {}, ICON_KEYS.map((k) => h('option', { value: k }, k)));
 
   const preview = h('div', { class: 'ex-icon', html: icon(ICON_KEYS[0]) });
@@ -109,7 +115,9 @@ function openNewExercise(app, paint) {
     h('label', {}, t('ex.name')), name,
     h('label', {}, t('ex.muscleGroup')), muscle,
     h('label', {}, t('ex.equipment')), equip,
-    h('label', {}, t('ex.icon')),
+    h('label', {}, t('ex.tracking')), tracking,
+    h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('ex.trackingHint')),
+    h('label', { style: 'margin-top:8px' }, t('ex.icon')),
     h('div', { class: 'row' }, [preview, iconSel]),
   ]));
 
@@ -117,7 +125,8 @@ function openNewExercise(app, paint) {
     class: 'btn', onClick: async () => {
       if (!name.value.trim()) { toast(t('ex.needName')); return; }
       await app.repo.addExercise({
-        name: name.value.trim(), muscleGroup: muscle.value, equipment: equip.value, icon: iconSel.value,
+        name: name.value.trim(), muscleGroup: muscle.value, equipment: equip.value,
+        icon: iconSel.value, tracking: tracking.value,
       }, app.userId);
       toast(t('ex.created'));
       popLayer();

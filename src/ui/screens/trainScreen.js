@@ -11,7 +11,8 @@ import { initAudio, beepWarning, beepEnd, beepPR, vibrate } from '../sound.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
 import { deriveRepRange } from '../../domain/progression.js';
-import { unitLabel, kgToDisplay, displayToKg } from '../../domain/units.js';
+import { unitLabel, kgToDisplay, displayToKg, formatDuration } from '../../domain/units.js';
+import { normalizeTracking, scoreSet, prScore } from '../../domain/personalRecord.js';
 
 /**
  * Reps objetivo de un plan-ejercicio ACOTADAS a su rango. Si el plan es antiguo
@@ -22,6 +23,26 @@ function targetRepsInRange(pe) {
   const r = pe.repMin > 0 && pe.repMax > 0 ? { min: pe.repMin, max: pe.repMax } : deriveRepRange(pe.targetReps);
   const target = pe.targetReps ?? r.min;
   return Math.min(r.max, Math.max(r.min, target));
+}
+
+/**
+ * Texto de la línea de PR según el tipo de medición (D16):
+ *  - weight_reps: "🏆 PR: 8 reps × 60 kg (fecha)"
+ *  - reps_only:   "🏆 PR: 12 reps (fecha)"
+ *  - time:        "🏆 PR: 1:30 (fecha)"
+ */
+function prLineText(pr, tracking, unit) {
+  const date = formatDate(pr.achievedAt);
+  if (tracking === 'reps_only') return t('train.prLineReps', { reps: pr.repsAtBest, date });
+  if (tracking === 'time') return t('train.prLineTime', { time: formatDuration(pr.bestDurationSeconds), date });
+  return t('train.prLine', { reps: pr.repsAtBest, weight: kgToDisplay(pr.bestWeight, unit), unit: unitLabel(unit), date });
+}
+
+/** Representación corta de una serie para la línea "última vez". */
+function setBrief(s, tracking, unit) {
+  if (tracking === 'reps_only') return `${s.reps}`;
+  if (tracking === 'time') return formatDuration(s.durationSeconds);
+  return `${kgToDisplay(s.weight, unit)}×${s.reps}`;
 }
 
 // Handle del cronómetro de descanso activo. Vive a nivel de módulo para poder
@@ -145,6 +166,7 @@ async function renderActiveSession(root, app, ctx) {
 
 async function exerciseCard(app, ctx, pe, ex) {
   const unit = ctx.unit ?? 'kg';
+  const tracking = normalizeTracking(ex.tracking); // tipo de medición (D16)
   const pr = await app.repo.getPR(ex.id, app.userId);
   const last = await app.lastPerformance(ex.id, ctx.session.id);       // #2 autorrelleno
   const suggestion = await app.suggestionFor(ex, pe, ctx.session.id);   // #1 sugerencia
@@ -155,11 +177,9 @@ async function exerciseCard(app, ctx, pe, ex) {
     h('div', { class: 'ex-icon', html: icon(ex.icon) }),
     h('div', {}, [
       h('div', { style: 'font-weight:800' }, ex.name),
-      pr
-        ? h('div', { class: 'pr-line' }, t('train.prLine', { reps: pr.repsAtBest, weight: kgToDisplay(pr.bestWeight, unit), unit: unitLabel(unit), date: formatDate(pr.achievedAt) }))
-        : h('div', { class: 'muted' }, t('train.noPR')),
+      pr ? h('div', { class: 'pr-line' }, prLineText(pr, tracking, unit)) : h('div', { class: 'muted' }, t('train.noPR')),
       prevSets.length
-        ? h('div', { class: 'last-line' }, t('train.lastTime', { sets: prevSets.map((s) => `${kgToDisplay(s.weight, unit)}×${s.reps}`).join(' · ') }))
+        ? h('div', { class: 'last-line' }, t('train.lastTime', { sets: prevSets.map((s) => setBrief(s, tracking, unit)).join(' · ') }))
         : null,
       // Sugerencia de progresión (coach ligero, #1)
       suggestion ? h('div', { class: 'suggestion' }, `💡 ${suggestion.text}`) : null,
@@ -172,13 +192,17 @@ async function exerciseCard(app, ctx, pe, ex) {
   // El peso se guarda en kg (canónico) pero se PREFIJA en la unidad del usuario (B11).
   const prefillWeight = kgToDisplay(last ? last.weight : (pe.targetWeight ?? 0), unit);
   const prefillReps = last ? last.reps : targetRepsInRange(pe);
+  // Duración por defecto para ejercicios de tiempo (D16).
+  const prefillDuration = last && last.durationSeconds > 0
+    ? last.durationSeconds
+    : (pe.targetDurationSeconds ?? 30);
 
   // Filas de series (targetSets). Comparten un "estado previo" para el botón repetir (#3).
   const setsWrap = h('div', { style: 'margin-top:10px' });
   const nSets = pe.targetSets || 3;
-  const lastEntered = { weight: prefillWeight, reps: prefillReps };
+  const lastEntered = { weight: prefillWeight, reps: prefillReps, durationSeconds: prefillDuration };
   for (let i = 1; i <= nSets; i++) {
-    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { prefillWeight, prefillReps, lastEntered, unit }));
+    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { prefillWeight, prefillReps, prefillDuration, lastEntered, unit, tracking }));
   }
   card.appendChild(setsWrap);
 
@@ -200,12 +224,16 @@ async function exerciseCard(app, ctx, pe, ex) {
 }
 
 function setRow(app, ctx, pe, ex, setNumber, opts) {
-  const { prefillWeight, prefillReps, lastEntered, unit = 'kg' } = opts;
+  const { prefillWeight, prefillReps, prefillDuration, lastEntered, unit = 'kg', tracking = 'weight_reps' } = opts;
+  const isRepsOnly = tracking === 'reps_only';
+  const isTime = tracking === 'time';
   // Incremento del spinner acorde a la unidad: discos de gimnasio van de 2.5 en
   // 2.5 lb / 1.25 en kg aprox; usamos 2.5 (lb) y 0.5 (kg) como pasos cómodos.
   const weightStepAttr = unit === 'lb' ? '2.5' : '0.5';
   const weight = h('input', { type: 'number', min: '0', step: weightStepAttr, value: String(prefillWeight ?? 0), style: 'width:80px' });
   const reps = h('input', { type: 'number', min: '0', value: String(prefillReps ?? 0), style: 'width:70px' });
+  // Input de duración en segundos para ejercicios de tiempo (D16).
+  const duration = h('input', { type: 'number', min: '0', step: '1', value: String(prefillDuration ?? 0), class: 'dur-input', style: 'width:72px' });
   // RIR opcional (B10): reps en reserva (0 = al fallo). Vacío = sin dato.
   const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', title: t('train.rirHint'), class: 'rir-input', style: 'width:58px' });
   const row = h('div', { class: 'set-row' });
@@ -221,6 +249,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.repeatSet'), onClick: () => {
     weight.value = String(lastEntered.weight ?? prefillWeight ?? 0);
     reps.value = String(lastEntered.reps ?? prefillReps ?? 0);
+    duration.value = String(lastEntered.durationSeconds ?? prefillDuration ?? 0);
   } }, '⟲');
   const doneBtn = h('button', { class: 'btn btn-sm', title: t('train.saveSet'), onClick: confirm }, '✓');
   // Botones de edición/borrado, ocultos hasta que la serie está confirmada (A1).
@@ -228,8 +257,17 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.deleteSet'), style: 'display:none', onClick: remove }, '🗑');
 
   row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
-  row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, unitLabel(unit)));
-  row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+  // Campos según el tipo de medición (D16):
+  if (isTime) {
+    // Solo duración (segundos). Sin peso ni reps.
+    row.appendChild(duration); row.appendChild(h('span', { class: 'unit muted' }, t('train.seconds')));
+  } else {
+    if (!isRepsOnly) {
+      // Peso solo en ejercicios de peso+reps.
+      row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, unitLabel(unit)));
+    }
+    row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+  }
   row.appendChild(rir);
   row.appendChild(warmBtn);
   row.appendChild(repeatBtn);
@@ -246,17 +284,16 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     // reconciliando el trofeo (.pr) y celebrando si desmarcar la asciende a PR.
     if (setId) {
       const { set, pr, isPR } = await app.editSet(setId, { isWarmup });
-      const wKg = set?.weight ?? 0, r = set?.reps ?? 0; // set.weight ya está en kg
       // Una serie de calentamiento nunca lleva trofeo; si no, se marca si es el PR.
-      row.classList.toggle('pr', !isWarmup && isThisThePR(pr, wKg, r));
-      if (isPR) celebratePR(ex, kgToDisplay(wKg, unit), r, unit);
+      row.classList.toggle('pr', !isWarmup && isThisThePR(pr, set, tracking));
+      if (isPR) celebratePR(ex, set, tracking, unit);
     }
   }
 
   /** Pasa la fila a modo "confirmada": inputs bloqueados, botones editar/borrar. */
   function toConfirmedUI() {
     row.classList.add('done');
-    weight.disabled = true; reps.disabled = true; rir.disabled = true;
+    weight.disabled = true; reps.disabled = true; duration.disabled = true; rir.disabled = true;
     doneBtn.style.display = 'none';
     repeatBtn.style.display = 'none';
     warmBtn.style.display = 'none';
@@ -266,7 +303,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   /** Pasa la fila a modo "edición": inputs activos, botón guardar visible. */
   function toEditingUI() {
     row.classList.remove('done');
-    weight.disabled = false; reps.disabled = false; rir.disabled = false;
+    weight.disabled = false; reps.disabled = false; duration.disabled = false; rir.disabled = false;
     doneBtn.style.display = '';
     warmBtn.style.display = '';
     editBtn.style.display = 'none';
@@ -282,24 +319,37 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   }
 
   async function confirm() {
-    const w = parseFloat(weight.value) || 0; // en la unidad del usuario (display)
+    const w = parseFloat(weight.value) || 0;        // peso en unidad display
     const r = parseInt(reps.value) || 0;
-    if (w <= 0 || r <= 0) { toast(t('train.needWeightReps')); return; }
+    const d = parseInt(duration.value) || 0;         // segundos (time)
     const rirVal = parseRir();
-    // El dominio trabaja SIEMPRE en kg: convertimos el valor introducido (B11).
+    // El dominio trabaja SIEMPRE en kg: convertimos el peso introducido (B11).
     const wKg = displayToKg(w, unit);
 
-    // Recordar lo confirmado para el botón "repetir" (en unidad display, #3).
-    lastEntered.weight = w;
-    lastEntered.reps = r;
+    // Validación y payload según el tipo de medición (D16).
+    let payload;
+    if (isTime) {
+      if (d <= 0) { toast(t('train.needDuration')); return; }
+      payload = { durationSeconds: d };
+      lastEntered.durationSeconds = d;
+    } else if (isRepsOnly) {
+      if (r <= 0) { toast(t('train.needReps')); return; }
+      payload = { reps: r };
+      lastEntered.reps = r;
+    } else {
+      if (w <= 0 || r <= 0) { toast(t('train.needWeightReps')); return; }
+      payload = { weight: wKg, reps: r };
+      lastEntered.weight = w;
+      lastEntered.reps = r;
+    }
 
     if (setId) {
       // Edición de una serie ya registrada (A1): no crea serie nueva ni timer.
-      const { pr, isPR } = await app.editSet(setId, { weight: wKg, reps: r, rir: rirVal });
-      row.classList.toggle('pr', isThisThePR(pr, wKg, r));
+      const { set, pr, isPR } = await app.editSet(setId, { ...payload, rir: rirVal });
+      row.classList.toggle('pr', isThisThePR(pr, set, tracking));
       toConfirmedUI();
       // Si al corregir se bate récord, se celebra igual que al registrar (#3).
-      if (isPR) celebratePR(ex, w, r, unit);
+      if (isPR) celebratePR(ex, set, tracking, unit);
       else toast(t('train.setUpdated'));
       return;
     }
@@ -307,12 +357,12 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     // El descanso real lo calcula appService desde el loggedAt de la última
     // serie persistida (peer review #10): medida estable, sin estado en la vista.
     const { isPR, set } = await app.logSet({
-      sessionId: ctx.session.id, exercise: ex, setNumber, weight: wKg, reps: r, isWarmup, rir: rirVal,
+      sessionId: ctx.session.id, exercise: ex, setNumber, ...payload, isWarmup, rir: rirVal,
     });
     setId = set.id;
 
     toConfirmedUI();
-    if (isPR) { row.classList.add('pr'); celebratePR(ex, w, r, unit); }
+    if (isPR) { row.classList.add('pr'); celebratePR(ex, set, tracking, unit); }
 
     // Inicia cronómetro de descanso hacia la siguiente serie
     startRestTimer(app, pe.restSeconds ?? 90);
@@ -326,14 +376,25 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   async function remove() {
     const w = parseFloat(weight.value) || 0;
     const r = parseInt(reps.value) || 0;
-    const ok = await confirmDialog(t('train.deleteSetConfirm', { weight: w, unit: unitLabel(unit), reps: r }), { confirmText: t('common.delete') });
+    const d = parseInt(duration.value) || 0;
+    // Descripción de la serie a borrar según el tipo de medición (D16).
+    const brief = isTime
+      ? formatDuration(d)
+      : isRepsOnly
+        ? t('train.deleteSetReps', { reps: r })
+        : t('train.deleteSetConfirm', { weight: w, unit: unitLabel(unit), reps: r });
+    const ok = await confirmDialog(
+      isTime ? t('train.deleteSetTime', { time: brief }) : brief,
+      { confirmText: t('common.delete') }
+    );
     if (!ok) return;
     if (setId) await app.removeSet(setId);
     // Si lo que se repite en filas hermanas eran los valores de ESTA serie,
     // devolverlos al prefill para no sugerir datos de una serie borrada (#6).
-    if (lastEntered.weight === w && lastEntered.reps === r) {
+    if (lastEntered.weight === w && lastEntered.reps === r && lastEntered.durationSeconds === d) {
       lastEntered.weight = prefillWeight;
       lastEntered.reps = prefillReps;
+      lastEntered.durationSeconds = prefillDuration;
     }
     row.remove();
     toast(t('train.setDeleted'));
@@ -342,11 +403,14 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   return row;
 }
 
-/** ¿La serie (w×r) es la que marca el PR vigente del ejercicio? */
-function isThisThePR(pr, w, r) {
-  if (!pr) return false;
-  const rm = w * (1 + r / 30);
-  return Math.abs(rm - pr.estimated1RM) < 1e-6;
+/**
+ * ¿La serie es la que marca el PR vigente del ejercicio? Compara el score de la
+ * serie (según el tipo de medición) con el score del PR. Admite PR antiguos sin
+ * `score` (solo `estimated1RM`).
+ */
+function isThisThePR(pr, set, tracking) {
+  if (!pr || !set) return false;
+  return Math.abs(scoreSet(set, tracking) - prScore(pr)) < 1e-6;
 }
 
 /** Cronómetro de descanso con bip a falta de N segundos (RF-24). */
@@ -455,15 +519,22 @@ function showSessionSummary(summary, unit, onClose) {
   document.body.appendChild(overlay);
 }
 
-/** Celebración visual de récord (RF-26). weight ya viene en la unidad de display. */
-function celebratePR(ex, weight, reps, unit = 'kg') {
+/**
+ * Celebración visual de récord (RF-26). Recibe la serie registrada (con el peso
+ * en kg canónico) y arma el subtexto según el tipo de medición (D16).
+ */
+function celebratePR(ex, set, tracking = 'weight_reps', unit = 'kg') {
   beepPR();
   vibrate([200, 80, 200, 80, 300]);
+  let detail;
+  if (tracking === 'reps_only') detail = `${set.reps} reps`;
+  else if (tracking === 'time') detail = formatDuration(set.durationSeconds);
+  else detail = `${kgToDisplay(set.weight, unit)}${unitLabel(unit)} × ${set.reps}`;
   const flash = h('div', { class: 'pr-flash' }, [
     h('div', { class: 'box' }, [
       h('div', { class: 'trophy' }, '🏆'),
       h('div', { class: 'txt' }, t('train.newRecord')),
-      h('div', { class: 'sub2' }, `${ex.name}: ${weight}${unitLabel(unit)} × ${reps}`),
+      h('div', { class: 'sub2' }, `${ex.name}: ${detail}`),
     ]),
   ]);
   document.body.appendChild(flash);

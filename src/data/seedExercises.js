@@ -21,11 +21,11 @@ export const SEED_EXERCISES = [
   { name: 'Aperturas con mancuernas', muscleGroup: 'pecho', equipment: 'mancuerna', icon: 'ex_aperturas' },
   { name: 'Contractor de pecho (peck deck)', muscleGroup: 'pecho', equipment: 'maquina', icon: 'ex_peck_deck' },
   { name: 'Cruce de poleas', muscleGroup: 'pecho', equipment: 'polea', icon: 'ex_cruce_poleas' },
-  { name: 'Fondos en paralelas', muscleGroup: 'pecho', equipment: 'peso corporal', icon: 'ex_fondos_paralelas' },
+  { name: 'Fondos en paralelas', muscleGroup: 'pecho', equipment: 'peso corporal', icon: 'ex_fondos_paralelas', tracking: 'reps_only' },
   { name: 'Press de pecho en máquina', muscleGroup: 'pecho', equipment: 'maquina', icon: 'ex_press_maquina' },
 
   // ---- Espalda ----
-  { name: 'Dominadas', muscleGroup: 'espalda', equipment: 'peso corporal', icon: 'ex_dominadas' },
+  { name: 'Dominadas', muscleGroup: 'espalda', equipment: 'peso corporal', icon: 'ex_dominadas', tracking: 'reps_only' },
   { name: 'Jalón al pecho', muscleGroup: 'espalda', equipment: 'polea', icon: 'ex_jalon' },
   { name: 'Remo con barra', muscleGroup: 'espalda', equipment: 'barra', icon: 'ex_remo_barra' },
   { name: 'Remo con mancuerna', muscleGroup: 'espalda', equipment: 'mancuerna', icon: 'ex_remo_db' },
@@ -55,7 +55,7 @@ export const SEED_EXERCISES = [
   { name: 'Extensión de tríceps en polea', muscleGroup: 'triceps', equipment: 'polea', icon: 'ex_tri_polea' },
   { name: 'Press francés con barra', muscleGroup: 'triceps', equipment: 'barra', icon: 'ex_press_frances' },
   { name: 'Extensión de tríceps con mancuerna', muscleGroup: 'triceps', equipment: 'mancuerna', icon: 'ex_tri_db' },
-  { name: 'Fondos en banco', muscleGroup: 'triceps', equipment: 'peso corporal', icon: 'ex_fondos_banco' },
+  { name: 'Fondos en banco', muscleGroup: 'triceps', equipment: 'peso corporal', icon: 'ex_fondos_banco', tracking: 'reps_only' },
   { name: 'Patada de tríceps', muscleGroup: 'triceps', equipment: 'mancuerna', icon: 'ex_patada_tri' },
 
   // ---- Pierna ----
@@ -71,9 +71,9 @@ export const SEED_EXERCISES = [
   { name: 'Patada de glúteo en polea', muscleGroup: 'gluteo', equipment: 'polea', icon: 'ex_patada_gluteo' },
 
   // ---- Core ----
-  { name: 'Plancha', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_plancha' },
+  { name: 'Plancha', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_plancha', tracking: 'time' },
   { name: 'Crunch abdominal', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_crunch' },
-  { name: 'Elevación de piernas', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_elev_piernas' },
+  { name: 'Elevación de piernas', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_elev_piernas', tracking: 'reps_only' },
   { name: 'Rueda abdominal', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_rueda_ab' },
   { name: 'Crunch en polea', muscleGroup: 'core', equipment: 'polea', icon: 'ex_crunch_polea' },
 
@@ -88,7 +88,7 @@ export const SEED_EXERCISES = [
 
   // ---- Pecho ----
   { name: 'Press declinado con barra', muscleGroup: 'pecho', equipment: 'barra', icon: 'ex_press_declinado' },
-  { name: 'Flexiones', muscleGroup: 'pecho', equipment: 'peso corporal', icon: 'ex_flexiones' },
+  { name: 'Flexiones', muscleGroup: 'pecho', equipment: 'peso corporal', icon: 'ex_flexiones', tracking: 'reps_only' },
 
   // ---- Espalda ----
   { name: 'Remo Pendlay', muscleGroup: 'espalda', equipment: 'barra', icon: 'ex_remo_pendlay' },
@@ -124,8 +124,8 @@ export const SEED_EXERCISES = [
 
   // ---- Core ----
   { name: 'Russian twist', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_russian_twist' },
-  { name: 'Mountain climbers', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_mountain_climbers' },
-  { name: 'Plancha lateral', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_plancha_lateral' },
+  { name: 'Mountain climbers', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_mountain_climbers', tracking: 'time' },
+  { name: 'Plancha lateral', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_plancha_lateral', tracking: 'time' },
 ];
 
 export const MUSCLE_GROUPS = ['pecho', 'espalda', 'hombro', 'biceps', 'triceps', 'pierna', 'gluteo', 'core', 'antebrazo'];

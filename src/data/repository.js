@@ -21,8 +21,17 @@ export const repository = {
   async listExercises(userId = APP.defaultUserId) {
     return db.exercises.where('userId').equals(userId).toArray();
   },
+  /** Un ejercicio por id (o undefined). Usado para leer su tipo de medición (D16). */
+  async getExercise(exerciseId) {
+    return db.exercises.get(exerciseId);
+  },
   async addExercise(exercise, userId = APP.defaultUserId) {
-    const record = { id: uid(), userId, isCustom: true, createdAt: new Date().toISOString(), ...exercise };
+    // Tipo de medición por defecto (D16): si el alta no lo especifica, es
+    // peso+reps (el comportamiento histórico).
+    const record = {
+      id: uid(), userId, isCustom: true, createdAt: new Date().toISOString(),
+      tracking: 'weight_reps', ...exercise,
+    };
     await db.exercises.put(record);
     return record;
   },

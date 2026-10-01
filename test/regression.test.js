@@ -612,4 +612,98 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(r.shouldWarn).toBe(true);
     expect(r.daysSince).toBe(null);
   });
+
+  // --- D16: tipos de medición por ejercicio (reps_only / time) ---
+
+  it('reps_only (Dominadas): el PR es por reps y el 1RM no aplica', async () => {
+    await app.bootstrap();
+    const dominadas = (await repository.listExercises(U)).find((e) => e.name === 'Dominadas');
+    expect(dominadas.tracking).toBe('reps_only'); // viene del catálogo semilla
+
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: dominadas.id, order: 1, targetSets: 3, repMin: 6, repMax: 10, targetReps: 8, restSeconds: 90 });
+
+    const s = await app.startSession(plan, day);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: dominadas, setNumber: 1, reps: 8 });
+    expect(r1.isPR).toBe(true);
+    const r2 = await app.logSet({ sessionId: s.id, exercise: dominadas, setNumber: 2, reps: 10 });
+    expect(r2.isPR).toBe(true); // más reps = nuevo récord
+    await repository.finishSession(s.id);
+
+    const pr = await repository.getPR(dominadas.id, U);
+    expect(pr.tracking).toBe('reps_only');
+    expect(pr.repsAtBest).toBe(10);
+    expect(pr.score).toBe(10);
+    expect(pr.estimated1RM).toBe(0);
+
+    // La sugerencia propone una repetición más, sin peso.
+    const [pe] = await repository.listPlanExercises(day.id);
+    const sug = await app.suggestionFor(dominadas, pe);
+    expect(sug.kind).toBe('reps');
+    expect(sug.reps).toBe(11);
+    expect(sug.weight).toBe(0);
+  });
+
+  it('time (Plancha): el PR es por segundos y aguantar más lo bate', async () => {
+    await app.bootstrap();
+    const plancha = (await repository.listExercises(U)).find((e) => e.name === 'Plancha');
+    expect(plancha.tracking).toBe('time');
+
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: plancha.id, order: 1, targetSets: 3, targetDurationSeconds: 30, restSeconds: 60 });
+
+    const s = await app.startSession(plan, day);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: plancha, setNumber: 1, durationSeconds: 45 });
+    expect(r1.isPR).toBe(true);
+    expect(r1.set.durationSeconds).toBe(45);
+    const r2 = await app.logSet({ sessionId: s.id, exercise: plancha, setNumber: 2, durationSeconds: 30 });
+    expect(r2.isPR).toBe(false); // menos tiempo no bate
+    await repository.finishSession(s.id);
+
+    const pr = await repository.getPR(plancha.id, U);
+    expect(pr.tracking).toBe('time');
+    expect(pr.bestDurationSeconds).toBe(45);
+
+    // editSet sobre tiempo recomputa el PR.
+    const { pr: pr2 } = await app.editSet(r1.set.id, { durationSeconds: 20 });
+    expect(pr2.bestDurationSeconds).toBe(30); // el mejor que queda (la 2ª serie)
+  });
+
+  it('un ejercicio time no aporta volumen en kg al resumen de sesión', async () => {
+    await app.bootstrap();
+    const plancha = (await repository.listExercises(U)).find((e) => e.name === 'Plancha');
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: plancha.id, order: 1, targetSets: 2, targetDurationSeconds: 30, restSeconds: 60 });
+
+    const s = await app.startSession(plan, day);
+    await app.logSet({ sessionId: s.id, exercise: plancha, setNumber: 1, durationSeconds: 40 });
+    await repository.finishSession(s.id);
+
+    const sum = await app.sessionSummary(s.id);
+    expect(sum.sets).toBe(1);           // cuenta como serie de trabajo
+    expect(sum.totalVolumeKg).toBe(0);  // pero sin peso no hay volumen en kg
+    expect(sum.prs).toBe(1);
+  });
+
+  it('reconcileExerciseTracking hace backfill del tipo en instalaciones previas a D16', async () => {
+    await app.bootstrap();
+    const all = await repository.listExercises(U);
+    const dominadas = all.find((e) => e.name === 'Dominadas');
+    const press = all.find((e) => e.name === 'Press banca con barra');
+
+    // Simular instalación antigua: quitar el campo tracking a mano.
+    await db.exercises.update(dominadas.id, { tracking: undefined });
+    await db.exercises.update(press.id, { tracking: undefined });
+
+    await app.reconcileExerciseTracking();
+
+    expect((await repository.getExercise(dominadas.id)).tracking).toBe('reps_only'); // del catálogo
+    expect((await repository.getExercise(press.id)).tracking).toBe('weight_reps');   // default
+  });
 });

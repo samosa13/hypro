@@ -54,3 +54,18 @@ export function displayToKg(value, unit) {
 export function formatWeight(kg, unit) {
   return `${kgToDisplay(kg, unit)} ${unitLabel(unit)}`;
 }
+
+/**
+ * Formatea una duración en segundos para la UI (D16, ejercicios de tiempo).
+ * Menos de 60 s → "45s"; a partir de un minuto → "1:30" (m:ss con relleno).
+ * No depende de la unidad de peso; vive aquí por ser formateo de dominio puro.
+ * @param {number} seconds
+ * @returns {string}
+ */
+export function formatDuration(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rest = s % 60;
+  return `${m}:${String(rest).padStart(2, '0')}`;
+}

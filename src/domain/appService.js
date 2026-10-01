@@ -9,7 +9,7 @@
 import repository from '../data/repository.js';
 import { SEED_EXERCISES } from '../data/seedExercises.js';
 import { APP, DEFAULT_SETTINGS } from '../config/app.config.js';
-import { isNewPR, isTiePR, buildPR, estimate1RM, bestPRFromSets } from './personalRecord.js';
+import { isNewPR, isTiePR, buildPR, estimate1RM, bestPRFromSets, scoreSet, normalizeTracking, prScore } from './personalRecord.js';
 import { positionForNewSession, currentPosition } from './effectiveWeek.js';
 import { dateKey } from './dateKey.js';
 
@@ -29,6 +29,16 @@ function seedKeyOf(seed) {
 export function createAppService(repo = repository, userId = APP.defaultUserId) {
   const uid = () =>
     (crypto?.randomUUID?.() ?? 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+  /**
+   * Tipo de medición de un ejercicio por su id (D16). Si el ejercicio no existe
+   * o no declara `tracking` (instalación anterior a D16), devuelve el default
+   * 'weight_reps', de modo que todo el histórico previo se comporta igual.
+   */
+  async function trackingOf(exerciseId) {
+    const ex = await repo.getExercise?.(exerciseId);
+    return normalizeTracking(ex?.tracking);
+  }
 
   return {
     /** Arranque: siembra ejercicios, asegura ajustes y hace backup diario. */
@@ -51,6 +61,9 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         // reconcilian por nombre para los ejercicios semilla (no custom). Así el
         // usuario ve los pictogramas nuevos sin borrar sus datos.
         await this.reconcileSeedIcons();
+        // Backfill del tipo de medición (D16): propaga el tracking del catálogo
+        // a instalaciones previas y pone 'weight_reps' a los ejercicios propios.
+        await this.reconcileExerciseTracking();
       }
       // Migración de rangos de reps: los planes antiguos solo tenían un nº de
       // reps objetivo (targetReps). Se les deriva un rango [repMin, repMax] para
@@ -116,6 +129,47 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Backfill del tipo de medición de los ejercicios (D16). Migración no
+     * destructiva para instalaciones anteriores a D16:
+     *  - Ejercicios semilla: toman el `tracking` declarado en el catálogo
+     *    (emparejados por seedKey, con respaldo por nombre). Los que el catálogo
+     *    no declara se asumen 'weight_reps'.
+     *  - Ejercicios propios (isCustom) sin tracking: 'weight_reps' por defecto.
+     * Idempotente: solo escribe cuando falta el campo o difiere del catálogo.
+     */
+    async reconcileExerciseTracking() {
+      const existing = await repo.listExercises(userId);
+      const bySeedKey = Object.fromEntries(SEED_EXERCISES.map((s) => [seedKeyOf(s), s]));
+      const byName = Object.fromEntries(SEED_EXERCISES.map((s) => [s.name, s]));
+      const toUpdate = [];
+      // Ejercicios cuyo tipo CAMBIA de verdad (no solo backfill de null): su PR,
+      // si lo hay, debe recomputarse porque el score se mide ahora distinto
+      // (peer review D16 #1). Protege ante backups con datos cruzados.
+      const changedType = [];
+      for (const ex of existing) {
+        if (ex.isCustom) {
+          if (ex.tracking == null) toUpdate.push({ ...ex, tracking: 'weight_reps' });
+          continue;
+        }
+        const seed = (ex.seedKey && bySeedKey[ex.seedKey]) || byName[ex.name];
+        const desired = (seed && seed.tracking) || 'weight_reps';
+        if (ex.tracking !== desired) {
+          toUpdate.push({ ...ex, tracking: desired });
+          // Solo es un cambio real de tipo si antes había un valor distinto
+          // (no un simple backfill desde null/undefined de peso+reps).
+          if (ex.tracking != null && ex.tracking !== 'weight_reps') changedType.push(ex.id);
+          else if (ex.tracking != null && desired !== 'weight_reps') changedType.push(ex.id);
+        }
+      }
+      if (toUpdate.length) await repo.bulkAddExercises(toUpdate);
+      // Recomputar el PR de los que cambiaron de tipo y tengan récord guardado.
+      for (const exId of changedType) {
+        const pr = await repo.getPR(exId, userId);
+        if (pr) await this.recomputePR(exId);
+      }
+    },
+
+    /**
      * Rellena repMin/repMax en los planExercises que aún no los tengan,
      * derivándolos de su targetReps (rango centrado ±2). Migración no destructiva:
      * no toca los que ya tengan rango ni ningún otro campo. Idempotente.
@@ -147,13 +201,15 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * Registra una serie y evalúa PR (RF-21, RF-26, RF-27).
      * @returns {{set:object, isPR:boolean, pr:object|null}}
      */
-    async logSet({ sessionId, exercise, setNumber, weight, reps, restTakenSeconds = null, isWarmup = false, rir = null }) {
+    async logSet({ sessionId, exercise, setNumber, weight, reps, durationSeconds = null, restTakenSeconds = null, isWarmup = false, rir = null }) {
       const currentPR = await repo.getPR(exercise.id, userId);
-      const setForCheck = { weight, reps };
+      // Tipo de medición del ejercicio (D16): decide cómo se puntúa la serie.
+      const tracking = normalizeTracking(exercise.tracking);
+      const setForCheck = { weight, reps, durationSeconds };
       // Las series de calentamiento (B9) NO compiten por el récord: no cuentan
-      // como PR ni refrescan su fecha, aunque el 1RM fuese alto.
-      const newPR = !isWarmup && isNewPR(setForCheck, currentPR);
-      const tiePR = !isWarmup && !newPR && isTiePR(setForCheck, currentPR);
+      // como PR ni refrescan su fecha, aunque la marca fuese alta.
+      const newPR = !isWarmup && isNewPR(setForCheck, currentPR, tracking);
+      const tiePR = !isWarmup && !newPR && isTiePR(setForCheck, currentPR, tracking);
 
       // Descanso real estable (peer review #10): medido desde el loggedAt de la
       // última serie ya registrada de la sesión, no desde memoria de la vista.
@@ -171,8 +227,12 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         exerciseId: exercise.id,
         exerciseName: exercise.name,
         setNumber,
-        weight,
-        reps,
+        // Peso/reps/duración: null explícito cuando el tipo de medición no los
+        // usa, para datos homogéneos (peer review D16 #4).
+        weight: Number.isFinite(weight) ? weight : null,
+        reps: Number.isFinite(reps) ? reps : null,
+        // Duración en segundos para ejercicios de tiempo (D16); null si no aplica.
+        durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
         restTakenSeconds: realRest,
         isWarmup: !!isWarmup,
         // RIR (reps en reserva) opcional (B10): metadato de esfuerzo percibido.
@@ -183,7 +243,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
 
       let pr = currentPR;
       if (newPR) {
-        pr = await repo.savePR(buildPR({ exerciseId: exercise.id, weight, reps, loggedAt: set.loggedAt }, userId));
+        pr = await repo.savePR(buildPR({ exerciseId: exercise.id, weight, reps, durationSeconds, loggedAt: set.loggedAt }, userId, tracking));
       } else if (tiePR) {
         // Empate: NO se celebra ni se mueve la fecha. El PR conserva la fecha en
         // que se logró POR PRIMERA VEZ (la más antigua). Política unificada con
@@ -202,7 +262,8 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async recomputePR(exerciseId) {
       const sets = await repo.listSetsForExercise(exerciseId);
-      const best = bestPRFromSets(sets, exerciseId, userId);
+      const tracking = await trackingOf(exerciseId);
+      const best = bestPRFromSets(sets, exerciseId, userId, tracking);
       if (!best) {
         await repo.deletePR(exerciseId, userId);
         return null;
@@ -217,16 +278,18 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * existiendo una serie.
      * @returns {Promise<{set:object, pr:object|null}>}
      */
-    async editSet(setId, { weight, reps, isWarmup, rir } = {}) {
+    async editSet(setId, { weight, reps, durationSeconds, isWarmup, rir } = {}) {
       const existing = await repo.getSet(setId);
       if (!existing) return { set: null, pr: null, isPR: false };
-      // 1RM del récord ANTES de editar, para saber si la edición bate PR.
+      const tracking = await trackingOf(existing.exerciseId);
+      // Score del récord ANTES de editar, para saber si la edición bate PR.
       const prBefore = await repo.getPR(existing.exerciseId, userId);
-      const rmBefore = prBefore?.estimated1RM ?? 0;
+      const scoreBefore = prScore(prBefore);
 
       const patch = {};
       if (weight != null) patch.weight = weight;
       if (reps != null) patch.reps = reps;
+      if (durationSeconds != null) patch.durationSeconds = durationSeconds; // ejercicios de tiempo (D16)
       if (isWarmup != null) patch.isWarmup = !!isWarmup; // marcar/desmarcar calentamiento (B9)
       if (rir !== undefined) patch.rir = Number.isFinite(rir) ? rir : null; // RIR opcional (B10)
       const set = await repo.updateLoggedSet(setId, patch);
@@ -234,9 +297,11 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       // El flag isPR de cada serie se mantiene coherente con el PR recomputado.
       await this.reconcileSetPRFlags(existing.exerciseId, pr);
       // ¿La edición de ESTA serie estableció un récord nuevo? (para celebrar en UI)
-      // Una serie de calentamiento nunca cuenta como récord.
-      const isPR = !set.isWarmup && !!pr && estimate1RM(set.weight, set.reps) >= pr.estimated1RM
-        && pr.estimated1RM > rmBefore + 1e-6;
+      // Una serie de calentamiento nunca cuenta como récord. Se compara por el
+      // score genérico (1RM / reps / segundos según el tipo de medición).
+      const prScoreNow = prScore(pr);
+      const setScore = scoreSet(set, tracking);
+      const isPR = !set.isWarmup && !!pr && setScore >= prScoreNow && prScoreNow > scoreBefore + 1e-6;
       return { set, pr, isPR };
     },
 
@@ -268,13 +333,15 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async reconcileSetPRFlags(exerciseId, pr) {
       const sets = await repo.listSetsForExercise(exerciseId);
-      // Candidatas: las que casan 1RM + fecha con el PR. Puede haber más de una
-      // si comparten 1RM y timestamp (p.ej. backup restaurado). Marcamos UNA
+      const tracking = await trackingOf(exerciseId);
+      const prScoreVal = prScore(pr);
+      // Candidatas: las que casan score + fecha con el PR. Puede haber más de una
+      // si comparten score y timestamp (p.ej. backup restaurado). Marcamos UNA
       // sola (la de menor id, determinista) para no pintar dos trofeos (#4).
       const matches = pr
         ? sets.filter((s) =>
             !s.isWarmup &&
-            Math.abs(estimate1RM(s.weight, s.reps) - pr.estimated1RM) < 1e-6 &&
+            Math.abs(scoreSet(s, tracking) - prScoreVal) < 1e-6 &&
             new Date(s.loggedAt).getTime() === new Date(pr.achievedAt).getTime())
         : [];
       const chosenId = matches.length
@@ -324,8 +391,9 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async exerciseHistory(exerciseId) {
       const raw = await repo.listSetsForExercise(exerciseId);
-      // Las series de calentamiento no cuentan para la evolución de 1RM ni para
-      // el total de series "de trabajo" (B9): coherente con PR/volumen.
+      const tracking = await trackingOf(exerciseId);
+      // Las series de calentamiento no cuentan para la evolución ni para el
+      // total de series "de trabajo" (B9): coherente con PR/volumen.
       const all = raw.filter((s) => !s.isWarmup);
       // Agrupar por sesión.
       const bySession = new Map();
@@ -335,25 +403,31 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       }
       const points = [];
       for (const [, sets] of bySession) {
-        // Mejor serie de la sesión por 1RM; fecha = la más temprana de la sesión.
+        // Mejor serie de la sesión por score (según tipo); fecha = la más
+        // temprana de la sesión.
         let best = sets[0];
         for (const s of sets) {
-          if (estimate1RM(s.weight, s.reps) > estimate1RM(best.weight, best.reps)) best = s;
+          if (scoreSet(s, tracking) > scoreSet(best, tracking)) best = s;
         }
         const date = sets
           .map((s) => s.loggedAt)
           .sort((a, b) => new Date(a) - new Date(b))[0];
         points.push({
           date,
+          // `bestScore` es el valor comparable a graficar (1RM, reps o segundos
+          // según el tipo). `best1RM` se mantiene para compatibilidad y solo
+          // tiene sentido en weight_reps.
+          bestScore: Math.round(scoreSet(best, tracking) * 10) / 10,
           best1RM: Math.round(estimate1RM(best.weight, best.reps) * 10) / 10,
           bestWeight: best.weight,
           bestReps: best.reps,
+          bestDurationSeconds: best.durationSeconds ?? 0,
           sets: sets.length,
         });
       }
       points.sort((a, b) => new Date(a.date) - new Date(b.date));
       const pr = await repo.getPR(exerciseId, userId);
-      return { points, pr, totalSets: all.length };
+      return { points, pr, totalSets: all.length, tracking };
     },
 
     /**
@@ -399,19 +473,26 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const weekSets = await setsOf(weekSessions);
       const priorSets = await setsOf(priorSessions);
 
-      // Mejor 1RM histórico ANTERIOR a la semana, por ejercicio.
+      // Tipo de medición por ejercicio (D16) para puntuar cada serie con su
+      // métrica (1RM / reps / segundos) en lugar de asumir peso+reps.
+      const exercises = await repo.listExercises(userId);
+      const trackingById = Object.fromEntries(exercises.map((e) => [e.id, normalizeTracking(e.tracking)]));
+      const scoreOf = (s) => scoreSet(s, trackingById[s.exerciseId]);
+
+      // Mejor score histórico ANTERIOR a la semana, por ejercicio.
       const prByExercise = {};
       for (const s of priorSets) {
-        const rm = estimate1RM(s.weight, s.reps);
+        const sc = scoreOf(s);
         const prev = prByExercise[s.exerciseId];
-        if (!prev || rm > prev.estimated1RM) {
-          prByExercise[s.exerciseId] = { estimated1RM: rm, achievedAt: s.loggedAt };
+        if (!prev || sc > prev.estimated1RM) {
+          prByExercise[s.exerciseId] = { estimated1RM: sc, achievedAt: s.loggedAt };
         }
       }
 
       const { findPlateaus } = await import('./plateau.js');
+      // Cada serie aporta su `score` ya calculado según el tipo de medición (D16).
       const plateaus = findPlateaus(
-        weekSets.map((s) => ({ exerciseId: s.exerciseId, exerciseName: s.exerciseName, weight: s.weight, reps: s.reps })),
+        weekSets.map((s) => ({ exerciseId: s.exerciseId, exerciseName: s.exerciseName, score: scoreOf(s) })),
         prByExercise
       );
       return { week, plateaus };
@@ -424,16 +505,17 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async lastPerformance(exerciseId, excludeSessionId = null) {
       const all = await repo.listSetsForExercise(exerciseId);
+      const tracking = await trackingOf(exerciseId);
       // Ignora calentamientos: el autorrelleno/sugerencia parte de series reales (B9).
       const prior = all.filter((s) => s.sessionId !== excludeSessionId && !s.isWarmup);
       if (prior.length === 0) return null;
       // Sesión previa más reciente.
       const latestId = prior.sort((a, b) => new Date(b.loggedAt) - new Date(a.loggedAt))[0].sessionId;
       const sets = prior.filter((s) => s.sessionId === latestId).sort((a, b) => a.setNumber - b.setNumber);
-      // Mejor serie de esa sesión por 1RM estimado.
+      // Mejor serie de esa sesión por score (1RM / reps / segundos).
       let best = sets[0];
-      for (const s of sets) if (estimate1RM(s.weight, s.reps) > estimate1RM(best.weight, best.reps)) best = s;
-      return { weight: best.weight, reps: best.reps, sets };
+      for (const s of sets) if (scoreSet(s, tracking) > scoreSet(best, tracking)) best = s;
+      return { weight: best.weight, reps: best.reps, durationSeconds: best.durationSeconds ?? 0, sets };
     },
 
     /**
@@ -442,6 +524,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async suggestionFor(exercise, planExercise, excludeSessionId = null) {
       const last = await this.lastPerformance(exercise.id, excludeSessionId);
+      const tracking = normalizeTracking(exercise.tracking);
       const { suggestNext, deriveRepRange } = await import('./progression.js');
       // Rango objetivo del ejercicio. Si el plan es antiguo y aún no tiene rango
       // (migración no aplicada todavía), se deriva al vuelo del targetReps.
@@ -452,11 +535,18 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       // Unidad de presentación del usuario (B11): el texto del coach se muestra en ella.
       const settings = await repo.getSettings(userId);
       return suggestNext({
-        lastBest: last ? { weight: last.weight, reps: last.reps } : null,
-        target: { targetReps: planExercise?.targetReps, targetWeight: planExercise?.targetWeight },
+        lastBest: last
+          ? { weight: last.weight, reps: last.reps, durationSeconds: last.durationSeconds }
+          : null,
+        target: {
+          targetReps: planExercise?.targetReps,
+          targetWeight: planExercise?.targetWeight,
+          targetDurationSeconds: planExercise?.targetDurationSeconds,
+        },
         repRange,
         equipment: exercise.equipment,
         unit: settings.unit === 'lb' ? 'lb' : 'kg',
+        tracking,
       });
     },
 

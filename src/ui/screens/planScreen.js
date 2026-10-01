@@ -8,12 +8,35 @@ import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
 import { deriveRepRange, normalizeRepRange } from '../../domain/progression.js';
 import { MUSCLE_GROUPS } from '../../data/seedExercises.js';
-import { kgToDisplay, displayToKg, unitLabel } from '../../domain/units.js';
+import { kgToDisplay, displayToKg, unitLabel, formatDuration } from '../../domain/units.js';
+import { normalizeTracking } from '../../domain/personalRecord.js';
 
 /** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
 function repRangeLabel(pe) {
   const r = pe.repMin > 0 && pe.repMax > 0 ? { min: pe.repMin, max: pe.repMax } : deriveRepRange(pe.targetReps);
   return r.min === r.max ? String(r.min) : `${r.min}-${r.max}`;
+}
+
+/**
+ * Meta de un plan-ejercicio según su tipo de medición (D16):
+ *  - weight_reps: "3×8-12 · 60 kg · 90s"
+ *  - reps_only:   "3×8-12 reps · 90s"  (sin peso)
+ *  - time:        "3× 1:30 · 90s"      (duración objetivo)
+ */
+function exerciseMetaText(pe, ex, settings) {
+  const tracking = normalizeTracking(ex.tracking);
+  if (tracking === 'time') {
+    return t('plan.exerciseMetaTime', {
+      sets: pe.targetSets, time: formatDuration(pe.targetDurationSeconds ?? 30), rest: pe.restSeconds,
+    });
+  }
+  if (tracking === 'reps_only') {
+    return t('plan.exerciseMetaReps', { sets: pe.targetSets, reps: repRangeLabel(pe), rest: pe.restSeconds });
+  }
+  return t('plan.exerciseMeta', {
+    sets: pe.targetSets, reps: repRangeLabel(pe),
+    weight: kgToDisplay(pe.targetWeight, settings.unit), unit: unitLabel(settings.unit), rest: pe.restSeconds,
+  });
 }
 
 export async function renderPlan(root, app, opts = {}) {
@@ -167,7 +190,7 @@ async function openEditDay(root, app, plan, day) {
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
           h('div', {}, [
             h('div', { style: 'font-weight:700' }, ex.name),
-            h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: repRangeLabel(pe), weight: kgToDisplay(pe.targetWeight, settings.unit), unit: unitLabel(settings.unit), rest: pe.restSeconds })),
+            h('div', { class: 'muted' }, exerciseMetaText(pe, ex, settings)),
           ]),
         ]),
         h('div', { class: 'row', style: 'gap:4px' }, [
@@ -200,6 +223,8 @@ async function openEditDay(root, app, plan, day) {
   const weightStepAttr = settings.unit === 'lb' ? '2.5' : '0.5';
   const weight = h('input', { type: 'number', min: '0', step: weightStepAttr, value: String(kgToDisplay(20, settings.unit)) });
   const rest = h('input', { type: 'number', min: '0', value: String(settings.defaultRestSeconds) });
+  // Duración objetivo (segundos) para ejercicios de tiempo (D16).
+  const durationTarget = h('input', { type: 'number', min: '1', step: '1', value: '30' });
 
   const search = h('input', { type: 'search', placeholder: t('plan.searchExercise') });
   const muscleSel = h('select', {}, [
@@ -217,6 +242,7 @@ async function openEditDay(root, app, plan, day) {
       return;
     }
     const ex = exMap[pick.exerciseId];
+    const tracking = normalizeTracking(ex.tracking); // tipo de medición (D16)
     configWrap.appendChild(h('div', { class: 'row-between', style: 'margin-top:4px' }, [
       h('div', { class: 'row' }, [
         h('div', { class: 'ex-icon', html: icon(ex.icon) }),
@@ -224,23 +250,46 @@ async function openEditDay(root, app, plan, day) {
       ]),
       h('button', { class: 'btn btn-ghost btn-sm', onClick: () => { pick.exerciseId = ''; renderConfig(); paintPicker(); } }, t('plan.changeExercise')),
     ]));
-    configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
-      h('div', {}, [h('label', {}, t('plan.sets')), sets]),
-      h('div', {}, [h('label', {}, t('plan.weightKg', { unit: unitLabel(settings.unit) })), weight]),
-    ]));
-    configWrap.appendChild(h('label', { style: 'margin-top:8px' }, t('plan.repRange')));
-    configWrap.appendChild(h('div', { class: 'grid2' }, [
-      h('div', {}, [h('label', { class: 'muted' }, t('plan.repMin')), repMin]),
-      h('div', {}, [h('label', { class: 'muted' }, t('plan.repMax')), repMax]),
-    ]));
-    configWrap.appendChild(h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')));
+
+    if (tracking === 'time') {
+      // Series + duración objetivo. Sin peso ni rango de reps.
+      configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
+        h('div', {}, [h('label', {}, t('plan.sets')), sets]),
+        h('div', {}, [h('label', {}, t('plan.targetDuration')), durationTarget]),
+      ]));
+    } else if (tracking === 'reps_only') {
+      // Series + rango de reps. Sin peso.
+      configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
+        h('div', {}, [h('label', {}, t('plan.sets')), sets]),
+        h('div', {}),
+      ]));
+      configWrap.appendChild(h('label', { style: 'margin-top:8px' }, t('plan.repRange')));
+      configWrap.appendChild(h('div', { class: 'grid2' }, [
+        h('div', {}, [h('label', { class: 'muted' }, t('plan.repMin')), repMin]),
+        h('div', {}, [h('label', { class: 'muted' }, t('plan.repMax')), repMax]),
+      ]));
+      configWrap.appendChild(h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')));
+    } else {
+      // Peso + reps (comportamiento clásico).
+      configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
+        h('div', {}, [h('label', {}, t('plan.sets')), sets]),
+        h('div', {}, [h('label', {}, t('plan.weightKg', { unit: unitLabel(settings.unit) })), weight]),
+      ]));
+      configWrap.appendChild(h('label', { style: 'margin-top:8px' }, t('plan.repRange')));
+      configWrap.appendChild(h('div', { class: 'grid2' }, [
+        h('div', {}, [h('label', { class: 'muted' }, t('plan.repMin')), repMin]),
+        h('div', {}, [h('label', { class: 'muted' }, t('plan.repMax')), repMax]),
+      ]));
+      configWrap.appendChild(h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')));
+    }
+
     configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.restSec')), rest]),
       h('div', {}),
     ]));
     configWrap.appendChild(h('button', {
       class: 'btn btn-sm', style: 'margin-top:12px',
-      onClick: addSelected,
+      onClick: () => addSelected(tracking),
     }, t('plan.addToDay')));
   }
 
@@ -266,33 +315,44 @@ async function openEditDay(root, app, plan, day) {
           h('div', { class: 'row', style: 'gap:6px;margin-top:4px' }, [
             h('span', { class: 'chip' }, e.muscleGroup),
             h('span', { class: 'chip' }, e.equipment),
+            normalizeTracking(e.tracking) !== 'weight_reps'
+              ? h('span', { class: 'chip' }, t(`tracking.${normalizeTracking(e.tracking)}`))
+              : null,
           ]),
         ]),
       ]));
     }
   }
 
-  async function addSelected() {
+  async function addSelected(tracking = 'weight_reps') {
     if (!pick.exerciseId) { toast(t('plan.pickOne')); return; }
     const existing = await app.repo.listPlanExercises(day.id);
-    // Rango normalizado (min>=1, max>=min). targetReps = centro del rango,
-    // que sigue alimentando autorrelleno y objetivo sin historial.
-    const range = normalizeRepRange(repMin.value, repMax.value);
-    await app.repo.savePlanExercise({
+    const base = {
       planDayId: day.id, exerciseId: pick.exerciseId, order: existing.length + 1,
       targetSets: parseInt(sets.value) || settings.defaultSets,
-      repMin: range.min,
-      repMax: range.max,
-      targetReps: Math.round((range.min + range.max) / 2),
-      // El peso se introduce en la unidad del usuario pero se guarda en kg (B11).
-      targetWeight: displayToKg(parseFloat(weight.value) || 0, settings.unit),
       restSeconds: parseInt(rest.value) || settings.defaultRestSeconds,
-    });
+    };
+    if (tracking === 'time') {
+      // Ejercicio de tiempo: objetivo en segundos; sin peso ni reps.
+      base.targetDurationSeconds = Math.max(1, parseInt(durationTarget.value) || 30);
+    } else {
+      // Rango de reps (reps_only y weight_reps). targetReps = centro del rango.
+      const range = normalizeRepRange(repMin.value, repMax.value);
+      base.repMin = range.min;
+      base.repMax = range.max;
+      base.targetReps = Math.round((range.min + range.max) / 2);
+      // El peso solo aplica a weight_reps; se guarda en kg (B11).
+      if (tracking !== 'reps_only') {
+        base.targetWeight = displayToKg(parseFloat(weight.value) || 0, settings.unit);
+      }
+    }
+    await app.repo.savePlanExercise(base);
     // Reset del selector para poder añadir otro, restaurando valores por defecto.
     pick.exerciseId = '';
     sets.value = String(settings.defaultSets);
     repMin.value = '8'; repMax.value = '12';
     weight.value = String(kgToDisplay(20, settings.unit)); rest.value = String(settings.defaultRestSeconds);
+    durationTarget.value = '30';
     renderConfig();
     paintPicker();
     paintExercises();

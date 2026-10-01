@@ -9,7 +9,8 @@ import { icon } from '../icons.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
-import { kgToDisplay, unitLabel } from '../../domain/units.js';
+import { kgToDisplay, unitLabel, formatDuration } from '../../domain/units.js';
+import { normalizeTracking } from '../../domain/personalRecord.js';
 
 /**
  * @param {HTMLElement} root
@@ -34,12 +35,28 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
   ]));
 
   const { points, pr, totalSets } = await app.exerciseHistory(ex.id);
+  const tracking = normalizeTracking(ex.tracking); // tipo de medición (D16)
 
-  // PR vigente.
+  // Representación del valor comparable (score) de un punto, según el tipo.
+  const scoreText = (p) => {
+    if (tracking === 'reps_only') return `${Math.round(p.bestScore)} reps`;
+    if (tracking === 'time') return formatDuration(p.bestScore);
+    return `${kgToDisplay(p.bestScore, unit)} ${u}`;
+  };
+  // Para la gráfica: el eje Y es el score (reps/segundos tal cual; 1RM en la
+  // unidad del usuario para peso+reps).
+  const scoreY = (p) => (tracking === 'weight_reps' ? kgToDisplay(p.bestScore, unit) : p.bestScore);
+
+  // PR vigente, con el texto adecuado al tipo de medición.
+  const prText = pr
+    ? tracking === 'reps_only'
+      ? t('exh.prReps', { reps: pr.repsAtBest, date: formatDate(pr.achievedAt) })
+      : tracking === 'time'
+        ? t('exh.prTime', { time: formatDuration(pr.bestDurationSeconds), date: formatDate(pr.achievedAt) })
+        : t('exh.pr', { reps: pr.repsAtBest, weight: kgToDisplay(pr.bestWeight, unit), unit: u, date: formatDate(pr.achievedAt) })
+    : null;
   screen.appendChild(h('div', { class: 'card' }, [
-    pr
-      ? h('div', { class: 'pr-line' }, t('exh.pr', { reps: pr.repsAtBest, weight: kgToDisplay(pr.bestWeight, unit), unit: u, date: formatDate(pr.achievedAt) }))
-      : h('div', { class: 'muted' }, t('exh.noPR')),
+    prText ? h('div', { class: 'pr-line' }, prText) : h('div', { class: 'muted' }, t('exh.noPR')),
   ]));
 
   if (points.length === 0) {
@@ -48,12 +65,13 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     return;
   }
 
-  // Métricas rápidas. El 1RM se calcula en kg; se muestra en la unidad del usuario.
-  const best1RM = kgToDisplay(Math.max(...points.map((p) => p.best1RM)), unit);
+  // Métricas rápidas: mejor marca (score) y nº de series.
+  const bestPoint = points.reduce((a, b) => (b.bestScore > a.bestScore ? b : a));
+  const bestLabel = tracking === 'reps_only' ? t('exh.bestReps') : tracking === 'time' ? t('exh.bestTime') : t('exh.best1RM');
   screen.appendChild(h('div', { class: 'card grid2' }, [
     h('div', { class: 'metric' }, [
-      h('div', { class: 'big', style: 'font-size:22px' }, `${best1RM} ${u}`),
-      h('div', { class: 'lbl' }, t('exh.best1RM')),
+      h('div', { class: 'big', style: 'font-size:22px' }, scoreText(bestPoint)),
+      h('div', { class: 'lbl' }, bestLabel),
     ]),
     h('div', { class: 'metric' }, [
       h('div', { class: 'big', style: 'font-size:22px' }, String(totalSets)),
@@ -61,12 +79,21 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     ]),
   ]));
 
-  // Gráfica de evolución del 1RM (línea SVG), en la unidad del usuario.
+  // Gráfica de evolución (línea SVG) del valor comparable.
+  const evoTitle = tracking === 'reps_only' ? t('exh.evolutionReps') : tracking === 'time' ? t('exh.evolutionTime') : t('exh.evolution');
+  const evoHint = tracking === 'weight_reps' ? t('exh.evolutionHint') : t('exh.evolutionHintGeneric');
   screen.appendChild(h('div', { class: 'card' }, [
-    h('div', { style: 'font-weight:800;margin-bottom:10px' }, t('exh.evolution')),
-    lineChart(points.map((p) => ({ x: p.date, y: kgToDisplay(p.best1RM, unit) }))),
-    h('div', { class: 'faint', style: 'margin-top:8px' }, t('exh.evolutionHint')),
+    h('div', { style: 'font-weight:800;margin-bottom:10px' }, evoTitle),
+    lineChart(points.map((p) => ({ x: p.date, y: scoreY(p) }))),
+    h('div', { class: 'faint', style: 'margin-top:8px' }, evoHint),
   ]));
+
+  // Representación de la mejor serie de una sesión en la lista.
+  const sessionBest = (p) => {
+    if (tracking === 'reps_only') return t('exh.sessionLineReps', { reps: p.bestReps, sets: p.sets });
+    if (tracking === 'time') return t('exh.sessionLineTime', { time: formatDuration(p.bestDurationSeconds), sets: p.sets });
+    return t('exh.sessionLine', { weight: kgToDisplay(p.bestWeight, unit), unit: u, reps: p.bestReps, sets: p.sets });
+  };
 
   // Lista de sesiones (más reciente primero).
   screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, t('exh.sessions', { n: points.length })));
@@ -74,9 +101,9 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     screen.appendChild(h('div', { class: 'card row-between' }, [
       h('div', {}, [
         h('div', { style: 'font-weight:700' }, formatDate(p.date)),
-        h('div', { class: 'muted' }, t('exh.sessionLine', { weight: kgToDisplay(p.bestWeight, unit), unit: u, reps: p.bestReps, sets: p.sets })),
+        h('div', { class: 'muted' }, sessionBest(p)),
       ]),
-      h('div', { class: 'pr-line', style: 'font-weight:800' }, `${kgToDisplay(p.best1RM, unit)} ${u}`),
+      h('div', { class: 'pr-line', style: 'font-weight:800' }, scoreText(p)),
     ]));
   }
 

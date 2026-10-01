@@ -12,7 +12,13 @@
  * No mangonea: es una SUGERENCIA basada en lo que hiciste la última vez. El
  * usuario decide. Si no hay historial, sugiere el objetivo del plan.
  */
-import { kgToDisplay } from './units.js';
+import { kgToDisplay, formatDuration } from './units.js';
+import { normalizeTracking } from './personalRecord.js';
+
+/** Incremento de segundos sugerido para ejercicios de tiempo (D16). */
+export const TIME_STEP_SECONDS = 5;
+/** Incremento de repeticiones para ejercicios reps_only cuando ya hay historial. */
+export const REPS_ONLY_STEP = 1;
 
 /**
  * Deriva un rango de reps [min, max] a partir de un objetivo puntual (targetReps).
@@ -72,7 +78,43 @@ function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 12 }, equipment = '', unit = 'kg' } = {}) {
+export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 12 }, equipment = '', unit = 'kg', tracking = 'weight_reps' } = {}) {
+  const tk = normalizeTracking(tracking);
+  if (tk === 'reps_only') return suggestRepsOnly({ lastBest, target });
+  if (tk === 'time') return suggestTime({ lastBest, target });
+  return suggestWeightReps({ lastBest, target, repRange, equipment, unit });
+}
+
+/**
+ * Progresión para ejercicios de solo-repeticiones (D16): no hay peso, la mejora
+ * es hacer una repetición más que la última vez. Sin historial, propone el
+ * objetivo del plan (targetReps) o un arranque sensato.
+ */
+function suggestRepsOnly({ lastBest, target = {} }) {
+  if (!lastBest || !(lastBest.reps > 0)) {
+    const r = Math.max(1, Math.round(target.targetReps ?? 8));
+    return { weight: 0, reps: r, kind: 'plan', text: `Objetivo: ${r} reps` };
+  }
+  const reps = lastBest.reps + REPS_ONLY_STEP;
+  return { weight: 0, reps, kind: 'reps', text: `Hoy intenta ${reps} reps` };
+}
+
+/**
+ * Progresión para ejercicios de tiempo (D16): la mejora es aguantar unos
+ * segundos más que la última vez. Sin historial, propone el objetivo del plan
+ * (targetDurationSeconds) o un arranque sensato.
+ */
+function suggestTime({ lastBest, target = {} }) {
+  if (!lastBest || !(lastBest.durationSeconds > 0)) {
+    const d = Math.max(1, Math.round(target.targetDurationSeconds ?? 30));
+    return { durationSeconds: d, kind: 'plan', text: `Objetivo: ${formatDuration(d)}` };
+  }
+  const durationSeconds = lastBest.durationSeconds + TIME_STEP_SECONDS;
+  return { durationSeconds, kind: 'time', text: `Hoy aguanta ${formatDuration(durationSeconds)}` };
+}
+
+/** Progresión clásica de peso+reps (doble progresión). */
+function suggestWeightReps({ lastBest, target = {}, repRange = { min: 8, max: 12 }, equipment = '', unit = 'kg' }) {
   const max = repRange.max ?? 12;
   const min = repRange.min ?? 8;
   // Peso en texto, en la unidad del usuario (B11). El cálculo sigue en kg; solo

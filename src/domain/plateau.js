@@ -10,17 +10,21 @@
 import { estimate1RM } from './personalRecord.js';
 
 /**
- * @param {Array<{exerciseId, exerciseName, weight, reps}>} weekSets series de la semana
+ * @param {Array<{exerciseId, exerciseName, weight?, reps?, score?}>} weekSets series de la semana
+ *   Cada serie aporta un valor comparable: si trae `score` (D16, ya calculado
+ *   según el tipo de medición) se usa tal cual; si no, se calcula el 1RM de
+ *   peso+reps (comportamiento histórico).
  * @param {Object<string, {estimated1RM:number, achievedAt:string}>} prByExercise
  *   récord vigente por exerciseId (el que había ANTES de la semana)
  * @returns {Array<{exerciseId, exerciseName, prDate, bestThisWeek1RM, pr1RM}>}
  *   ejercicios sin progreso esta semana
  */
 export function findPlateaus(weekSets, prByExercise) {
-  // Mejor 1RM de la semana por ejercicio
+  const scoreOf = (s) => (typeof s.score === 'number' ? s.score : estimate1RM(s.weight, s.reps));
+  // Mejor score de la semana por ejercicio
   const bestByExercise = {};
   for (const s of weekSets) {
-    const rm = estimate1RM(s.weight, s.reps);
+    const rm = scoreOf(s);
     const prev = bestByExercise[s.exerciseId];
     if (!prev || rm > prev.rm) {
       bestByExercise[s.exerciseId] = { rm, name: s.exerciseName };

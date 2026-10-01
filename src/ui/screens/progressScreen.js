@@ -9,7 +9,8 @@ import { positionLabel } from '../../domain/effectiveWeek.js';
 import { currentStreak } from '../../domain/streak.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { t } from '../../i18n/index.js';
-import { kgToDisplay, unitLabel } from '../../domain/units.js';
+import { kgToDisplay, unitLabel, formatDuration } from '../../domain/units.js';
+import { normalizeTracking } from '../../domain/personalRecord.js';
 import { shareCard } from '../shareCard.js';
 
 export async function renderProgress(root, app) {
@@ -136,14 +137,29 @@ export async function renderProgress(root, app) {
     for (const pr of prs.sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))) {
       const ex = exMap[pr.exerciseId];
       const exName = ex?.name ?? 'Ejercicio';
-      const weightTxt = `${kgToDisplay(pr.bestWeight, settings.unit)}${unitLabel(settings.unit)}`;
+      // El récord se expresa según el tipo de medición del ejercicio (D16). El
+      // tracking vive en el ejercicio; el PR antiguo (sin tracking propio) cae a
+      // peso+reps vía normalizeTracking del campo del ejercicio.
+      const tracking = normalizeTracking(ex?.tracking ?? pr.tracking);
+      let headline, prLine;
+      if (tracking === 'reps_only') {
+        headline = `${pr.repsAtBest} reps`;
+        prLine = `${pr.repsAtBest} reps`;
+      } else if (tracking === 'time') {
+        headline = formatDuration(pr.bestDurationSeconds);
+        prLine = formatDuration(pr.bestDurationSeconds);
+      } else {
+        const weightTxt = `${kgToDisplay(pr.bestWeight, settings.unit)}${unitLabel(settings.unit)}`;
+        headline = `${kgToDisplay(pr.bestWeight, settings.unit)} ${unitLabel(settings.unit)} × ${pr.repsAtBest}`;
+        prLine = `${pr.repsAtBest} reps × ${weightTxt}`;
+      }
       // Botón compartir el PR como imagen (C14).
       const shareBtn = h('button', {
         class: 'btn btn-ghost btn-sm', title: t('share.pr'),
         onClick: async () => {
           const res = await shareCard({
             title: t('train.newRecord'),
-            headline: `${kgToDisplay(pr.bestWeight, settings.unit)} ${unitLabel(settings.unit)} × ${pr.repsAtBest}`,
+            headline,
             subtitle: exName,
             footer: formatDate(pr.achievedAt),
             filename: `hypro-pr-${(ex?.seedKey || exName).toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`,
@@ -156,7 +172,7 @@ export async function renderProgress(root, app) {
           h('div', { class: 'ex-icon', html: icon(ex?.icon ?? 'bodyweight') }),
           h('div', {}, [
             h('div', { style: 'font-weight:700' }, exName),
-            h('div', { class: 'pr-line' }, `${pr.repsAtBest} reps × ${weightTxt}`),
+            h('div', { class: 'pr-line' }, prLine),
             h('div', { class: 'faint' }, formatDate(pr.achievedAt)),
           ]),
         ]),

@@ -2,11 +2,13 @@
  * Tests unitarios de dominio (PLAN_TESTS §2). Puros, sin UI ni IndexedDB.
  */
 import { describe, it, expect } from 'vitest';
-import { estimate1RM, isNewPR, isTiePR, buildPR } from '../src/domain/personalRecord.js';
+import { estimate1RM, isNewPR, isTiePR, buildPR, scoreSet, bestPRFromSets, normalizeTracking } from '../src/domain/personalRecord.js';
 import { currentPosition, positionLabel, positionForNewSession } from '../src/domain/effectiveWeek.js';
 import { tenureSince, tenureLabel } from '../src/domain/gymTenure.js';
 import { currentStreak, maxGapDays } from '../src/domain/streak.js';
 import { findPlateaus } from '../src/domain/plateau.js';
+import { suggestNext } from '../src/domain/progression.js';
+import { formatDuration } from '../src/domain/units.js';
 
 describe('personalRecord · 1RM y PR', () => {
   it('UT-PR-06 · Epley: peso*(1+reps/30)', () => {
@@ -51,6 +53,102 @@ describe('personalRecord · 1RM y PR', () => {
     expect(isTiePR({ weight: 45, reps: 10 }, pr)).toBe(false);
     // sin PR previo no hay empate
     expect(isTiePR({ weight: 40, reps: 10 }, null)).toBe(false);
+  });
+});
+
+describe('personalRecord · tipos de medición (D16)', () => {
+  it('normalizeTracking acota a los tres valores válidos', () => {
+    expect(normalizeTracking('reps_only')).toBe('reps_only');
+    expect(normalizeTracking('time')).toBe('time');
+    expect(normalizeTracking('weight_reps')).toBe('weight_reps');
+    expect(normalizeTracking(undefined)).toBe('weight_reps');
+    expect(normalizeTracking('loquesea')).toBe('weight_reps');
+  });
+
+  it('scoreSet puntúa según el tipo: 1RM / reps / segundos', () => {
+    expect(scoreSet({ weight: 40, reps: 10 }, 'weight_reps')).toBeCloseTo(estimate1RM(40, 10), 5);
+    expect(scoreSet({ reps: 12 }, 'reps_only')).toBe(12);
+    expect(scoreSet({ durationSeconds: 45 }, 'time')).toBe(45);
+    // Datos ausentes del tipo → serie no puntuable (0).
+    expect(scoreSet({ weight: 0, reps: 0 }, 'reps_only')).toBe(0);
+    expect(scoreSet({ reps: 10 }, 'time')).toBe(0);
+  });
+
+  it('reps_only: el PR es hacer más repeticiones (el peso es irrelevante)', () => {
+    const pr = buildPR({ exerciseId: 'e1', reps: 8, loggedAt: '2026-09-14' }, 'me', 'reps_only');
+    expect(pr.tracking).toBe('reps_only');
+    expect(pr.repsAtBest).toBe(8);
+    expect(pr.score).toBe(8);
+    expect(isNewPR({ reps: 10 }, pr, 'reps_only')).toBe(true);  // más reps bate
+    expect(isNewPR({ reps: 7 }, pr, 'reps_only')).toBe(false);  // menos no
+    expect(isTiePR({ reps: 8 }, pr, 'reps_only')).toBe(true);   // igualar refresca fecha
+  });
+
+  it('time: el PR es aguantar más segundos', () => {
+    const pr = buildPR({ exerciseId: 'e1', durationSeconds: 60, loggedAt: '2026-09-14' }, 'me', 'time');
+    expect(pr.tracking).toBe('time');
+    expect(pr.bestDurationSeconds).toBe(60);
+    expect(pr.score).toBe(60);
+    expect(pr.estimated1RM).toBe(0); // 1RM no aplica a tiempo
+    expect(isNewPR({ durationSeconds: 75 }, pr, 'time')).toBe(true);
+    expect(isNewPR({ durationSeconds: 50 }, pr, 'time')).toBe(false);
+  });
+
+  it('bestPRFromSets recomputa el mejor por tipo, ignorando calentamientos', () => {
+    const sets = [
+      { exerciseId: 'e1', reps: 10, loggedAt: '2026-09-10' },
+      { exerciseId: 'e1', reps: 14, loggedAt: '2026-09-12', isWarmup: true }, // no cuenta
+      { exerciseId: 'e1', reps: 12, loggedAt: '2026-09-14' },
+    ];
+    const pr = bestPRFromSets(sets, 'e1', 'me', 'reps_only');
+    expect(pr.repsAtBest).toBe(12); // la de 14 era calentamiento
+    expect(pr.score).toBe(12);
+  });
+
+  it('PR antiguo sin `score` se compara por estimated1RM (compatibilidad)', () => {
+    const legacyPR = { estimated1RM: estimate1RM(40, 10), achievedAt: '2026-01-01' };
+    expect(isNewPR({ weight: 45, reps: 9 }, legacyPR, 'weight_reps')).toBe(true);
+    expect(isNewPR({ weight: 40, reps: 8 }, legacyPR, 'weight_reps')).toBe(false);
+  });
+});
+
+describe('progression · progresión por tipo de medición (D16)', () => {
+  it('reps_only: con historial sugiere +1 rep, sin peso', () => {
+    const s = suggestNext({ lastBest: { reps: 10 }, tracking: 'reps_only' });
+    expect(s.kind).toBe('reps');
+    expect(s.reps).toBe(11);
+    expect(s.weight).toBe(0);
+  });
+
+  it('reps_only: sin historial propone el objetivo del plan', () => {
+    const s = suggestNext({ lastBest: null, target: { targetReps: 8 }, tracking: 'reps_only' });
+    expect(s.kind).toBe('plan');
+    expect(s.reps).toBe(8);
+  });
+
+  it('time: con historial sugiere +5 s', () => {
+    const s = suggestNext({ lastBest: { durationSeconds: 60 }, tracking: 'time' });
+    expect(s.kind).toBe('time');
+    expect(s.durationSeconds).toBe(65);
+  });
+
+  it('time: sin historial propone el objetivo de duración', () => {
+    const s = suggestNext({ lastBest: null, target: { targetDurationSeconds: 45 }, tracking: 'time' });
+    expect(s.kind).toBe('plan');
+    expect(s.durationSeconds).toBe(45);
+  });
+});
+
+describe('units · formatDuration (D16)', () => {
+  it('menos de un minuto se muestra en segundos', () => {
+    expect(formatDuration(0)).toBe('0s');
+    expect(formatDuration(45)).toBe('45s');
+    expect(formatDuration(59)).toBe('59s');
+  });
+  it('a partir de un minuto, formato m:ss', () => {
+    expect(formatDuration(60)).toBe('1:00');
+    expect(formatDuration(90)).toBe('1:30');
+    expect(formatDuration(125)).toBe('2:05');
   });
 });
 
