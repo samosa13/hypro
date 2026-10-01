@@ -3,7 +3,25 @@
  */
 import { describe, it, expect } from 'vitest';
 import { suggestNext, weightStep, deriveRepRange, normalizeRepRange } from '../src/domain/progression.js';
-import { volumeByMuscle, volumeRanking } from '../src/domain/volume.js';
+import { volumeByMuscle, volumeRanking, volumeStatus } from '../src/domain/volume.js';
+
+describe('volume · semáforo de volumen vs objetivo (C13)', () => {
+  it('low por debajo del 70% del objetivo', () => {
+    expect(volumeStatus(8, 12)).toBe('low');   // 8 < 8.4
+  });
+  it('onTarget en la zona 70%-130%', () => {
+    expect(volumeStatus(12, 12)).toBe('onTarget');
+    expect(volumeStatus(9, 12)).toBe('onTarget');  // 9 >= 8.4
+    expect(volumeStatus(15, 12)).toBe('onTarget'); // 15 <= 15.6
+  });
+  it('high por encima del 130% del objetivo', () => {
+    expect(volumeStatus(16, 12)).toBe('high');  // 16 > 15.6
+  });
+  it('sin objetivo (<=0) devuelve onTarget', () => {
+    expect(volumeStatus(5, 0)).toBe('onTarget');
+    expect(volumeStatus(5, undefined)).toBe('onTarget');
+  });
+});
 import { kgToDisplay, displayToKg, unitLabel, formatWeight } from '../src/domain/units.js';
 
 describe('units · conversión kg/lb (B11)', () => {

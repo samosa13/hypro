@@ -98,22 +98,31 @@ export async function renderProgress(root, app) {
 
   // --- Volumen semanal por grupo muscular (#4) ---
   if (plan) {
-    const { ranking: volume, isCompletedWeek } = await app.weeklyVolume();
+    const { ranking: volume, isCompletedWeek, target } = await app.weeklyVolume();
     if (volume.length > 0) {
-      const maxV = Math.max(...volume.map((v) => v.sets));
+      // Escala contra el máximo entre volumen y objetivo, para que la marca del
+      // objetivo (C13) quepa dentro de la barra.
+      const maxV = Math.max(...volume.map((v) => v.sets), target || 0, 1);
       const title = isCompletedWeek ? t('progress.volumeLastWeek') : t('progress.volumeThisWeek');
       screen.appendChild(h('div', { class: 'card' }, [
         h('div', { style: 'font-weight:800;margin-bottom:10px' }, title),
-        ...volume.map((v) =>
-          h('div', { class: 'vol-row' }, [
+        ...volume.map((v) => {
+          const trackChildren = [
+            h('div', { class: `vol-bar vol-${v.status}`, style: `width:${Math.max(6, (v.sets / maxV) * 100)}%` }),
+          ];
+          // Marca vertical del objetivo (si hay objetivo configurado).
+          if (target > 0) {
+            trackChildren.push(h('div', { class: 'vol-target-mark', style: `left:${Math.min(100, (target / maxV) * 100)}%`, title: t('progress.volumeTarget', { n: target }) }));
+          }
+          return h('div', { class: 'vol-row' }, [
             h('div', { class: 'vol-label' }, v.muscle),
-            h('div', { class: 'vol-bar-track' }, [
-              h('div', { class: 'vol-bar', style: `width:${Math.max(6, (v.sets / maxV) * 100)}%` }),
-            ]),
-            h('div', { class: 'vol-count' }, String(v.sets)),
-          ])
-        ),
-        h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.volumeHint')),
+            h('div', { class: 'vol-bar-track' }, trackChildren),
+            h('div', { class: `vol-count vol-${v.status}` }, String(v.sets)),
+          ]);
+        }),
+        target > 0
+          ? h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.volumeTargetHint', { n: target }))
+          : h('div', { class: 'faint', style: 'margin-top:8px' }, t('progress.volumeHint')),
       ]));
     }
   }

@@ -86,6 +86,7 @@ export const DEFAULT_SETTINGS = {
   trainsAtNight: true,       // el usuario entrena de noche
   inactivityThresholdDays: 4,
   unit: 'kg',                // unidad de PESO de presentación (kg|lb); se guarda siempre en kg (B11)
+  weeklyVolumeTarget: 12,    // objetivo de series/semana por grupo muscular (C13); semáforo contra este valor
   // gymStartDate y planStartDate se fijan al usar la app la primera vez
 };
 

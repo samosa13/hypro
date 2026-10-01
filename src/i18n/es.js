@@ -165,6 +165,8 @@ export default {
   'progress.volumeThisWeek': 'Volumen esta semana (series por músculo)',
   'progress.volumeLastWeek': 'Volumen última semana completa (series por músculo)',
   'progress.volumeHint': 'El volumen semanal por músculo es la clave de la hipertrofia.',
+  'progress.volumeTarget': 'Objetivo: {n} series',
+  'progress.volumeTargetHint': 'La marca indica tu objetivo de {n} series/semana por músculo. Verde = en zona, naranja = corto, rojo = pasado.',
   'progress.yourRecords': 'Tus récords',
   'progress.noRecords': 'Aún no hay récords. Entrena y llegarán.',
 
@@ -181,6 +183,7 @@ export default {
   'settings.unit': 'Unidad de peso',
   'settings.unitKg': 'Kilogramos (kg)',
   'settings.unitLb': 'Libras (lb)',
+  'settings.weeklyVolumeTarget': 'Objetivo de series/semana por músculo',
   'settings.saveSettings': 'Guardar ajustes',
   'settings.saved': 'Ajustes guardados',
   'settings.backup': 'Copia de seguridad',

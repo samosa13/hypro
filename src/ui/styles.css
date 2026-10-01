@@ -304,6 +304,15 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 .vol-label { width: 78px; font-size: 13px; color: var(--color-text-muted); text-transform: capitalize; }
 .vol-bar-track { flex: 1; background: var(--color-surface-alt); border-radius: 999px; height: 15px; overflow: hidden; }
 .vol-bar { height: 100%; background: linear-gradient(90deg, var(--color-accent-deep, #e85d00), var(--color-accent-soft, #ff8c3a)); border-radius: 999px; transition: width .4s ease; }
+/* Semáforo de volumen vs objetivo (C13) */
+.vol-bar.vol-low { background: linear-gradient(90deg, #c99a00, var(--color-warning, #ffd60a)); }
+.vol-bar.vol-onTarget { background: linear-gradient(90deg, #1f9e42, var(--color-success, #31d158)); }
+.vol-bar.vol-high { background: linear-gradient(90deg, #c0362e, var(--color-danger, #ff453a)); }
+.vol-count.vol-low { color: var(--color-warning, #ffd60a); }
+.vol-count.vol-onTarget { color: var(--color-success, #31d158); }
+.vol-count.vol-high { color: var(--color-danger, #ff453a); }
+.vol-bar-track { position: relative; }
+.vol-target-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--color-text); opacity: .7; border-radius: 2px; }
 .vol-count { width: 26px; text-align: right; font-family: var(--font-display); font-size: 18px; font-weight: 700; }
 
 /* Gráfica de línea (historial por ejercicio A2) */

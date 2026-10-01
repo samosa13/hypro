@@ -459,6 +459,26 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(sum.prs).toBe(1);               // solo la primera serie marcó PR
   });
 
+  // --- C13: volumen semanal con objetivo y semáforo ---
+
+  it('weeklyVolume devuelve target y status por músculo (C13)', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    // objetivo bajo para forzar status 'high' con pocas series
+    await repository.saveSettings({ ...(await repository.getSettings(U)), weeklyVolumeTarget: 2 }, U);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 10 });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 3, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    const { ranking, target } = await app.weeklyVolume();
+    expect(target).toBe(2);
+    const pecho = ranking.find((r) => r.muscle === 'pecho');
+    expect(pecho.sets).toBe(3);
+    expect(pecho.target).toBe(2);
+    expect(pecho.status).toBe('high'); // 3 > 2*1.3
+  });
+
   // --- B10: RIR (reps en reserva) opcional por serie ---
 
   it('logSet persiste el RIR cuando se indica, y null cuando no', async () => {

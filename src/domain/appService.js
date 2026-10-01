@@ -489,8 +489,19 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         // Las series de calentamiento no suman volumen efectivo (B9).
         for (const st of ss) if (!st.isWarmup) sets.push({ muscleGroup: muscleById[st.exerciseId] });
       }
-      const { volumeByMuscle, volumeRanking } = await import('./volume.js');
-      return { ranking: volumeRanking(volumeByMuscle(sets)), isCompletedWeek };
+      const { volumeByMuscle, volumeRanking, volumeStatus } = await import('./volume.js');
+      // Objetivo de series/semana por músculo (C13) y semáforo contra él. Si el
+      // ajuste no existe (instalación anterior a C13), se usa el default; un 0
+      // explícito del usuario desactiva el semáforo.
+      const settings = await repo.getSettings(userId);
+      const rawTarget = settings.weeklyVolumeTarget ?? DEFAULT_SETTINGS.weeklyVolumeTarget;
+      const volTarget = Number(rawTarget) || 0;
+      const ranking = volumeRanking(volumeByMuscle(sets)).map((r) => ({
+        ...r,
+        target: volTarget,
+        status: volumeStatus(r.sets, volTarget),
+      }));
+      return { ranking, isCompletedWeek, target: volTarget };
     },
 
     /** Guarda una nota de texto libre en una sesión (#5). */

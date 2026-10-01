@@ -33,3 +33,20 @@ export function volumeRanking(volumeMap) {
     .map(([muscle, sets]) => ({ muscle, sets }))
     .sort((a, b) => b.sets - a.sets);
 }
+
+/**
+ * Semáforo del volumen semanal frente a un objetivo de series (C13).
+ *  - 'low'      : por debajo del 70% del objetivo (volumen insuficiente)
+ *  - 'onTarget' : entre el 70% y el 130% del objetivo (en zona buena)
+ *  - 'high'     : por encima del 130% del objetivo (quizá exceso)
+ * Si no hay objetivo (<=0), devuelve 'onTarget' (sin semáforo).
+ * @param {number} sets series hechas del músculo esta semana
+ * @param {number} target objetivo de series/semana
+ * @returns {'low'|'onTarget'|'high'}
+ */
+export function volumeStatus(sets, target) {
+  if (!(target > 0)) return 'onTarget';
+  if (sets < target * 0.7) return 'low';
+  if (sets > target * 1.3) return 'high';
+  return 'onTarget';
+}
