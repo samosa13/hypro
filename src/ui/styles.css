@@ -342,3 +342,14 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 .picker-list { max-height: 46vh; overflow-y: auto; margin-top: 10px; }
 .picker-item { margin: 8px 0; }
 .picker-item:active { transform: scale(0.99); }
+
+/* ---------- Superseries / circuitos (D17) ---------- */
+.group-block { border-left: 3px solid var(--color-accent, #ff6a00); }
+.group-round { padding: 8px 0; border-top: 1px dashed var(--color-border-soft, #22222c); }
+.group-round:first-of-type { border-top: none; }
+.group-ex-label { display: flex; align-items: center; color: var(--color-text-muted); }
+.ex-icon-sm { width: 22px; height: 22px; display: inline-grid; place-items: center; }
+.ex-icon-sm svg { width: 18px; height: 18px; }
+/* En el editor del plan, cohesionar visualmente las cards de un mismo grupo. */
+.card.grouped { border-left: 3px solid var(--color-accent, #ff6a00); }
+.card.group-cont { margin-bottom: 2px; }

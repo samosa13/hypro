@@ -706,4 +706,144 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect((await repository.getExercise(dominadas.id)).tracking).toBe('reps_only'); // del catálogo
     expect((await repository.getExercise(press.id)).tracking).toBe('weight_reps');   // default
   });
+
+  // --- D17: superseries / triseries / circuitos ---
+
+  /** Monta un día con 3 ejercicios conocidos y devuelve {day, pes}. */
+  async function setupDayWith3() {
+    await app.bootstrap();
+    const exs = await repository.listExercises(U);
+    const press = exs.find((e) => e.name === 'Press banca con barra');
+    const curl = exs.find((e) => e.name === 'Curl con barra');
+    const sent = exs.find((e) => e.name === 'Sentadilla con barra');
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    const mk = (ex, order) => repository.savePlanExercise({ planDayId: day.id, exerciseId: ex.id, order, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 40, restSeconds: 90 });
+    await mk(press, 1); await mk(curl, 2); await mk(sent, 3);
+    return { plan, day, press, curl, sent };
+  }
+
+  it('groupWithNext crea una superserie con groupId común y groupType superset', async () => {
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    const changed = await repository.groupWithNext(day.id, items[0].id);
+    expect(changed).toBe(true);
+    items = await repository.listPlanExercises(day.id);
+    // Los dos primeros comparten groupId; el tercero sigue suelto.
+    expect(items[0].groupId).toBeTruthy();
+    expect(items[1].groupId).toBe(items[0].groupId);
+    expect(items[0].groupType).toBe('superset');
+    expect(items[2].groupId == null).toBe(true);
+  });
+
+  it('encadenar un tercero convierte la superserie en triserie', async () => {
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id); // 1+2 superset
+    items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[1].id); // +3 → triserie
+    items = await repository.listPlanExercises(day.id);
+    const gid = items[0].groupId;
+    expect(items.every((pe) => pe.groupId === gid)).toBe(true);
+    expect(items.every((pe) => pe.groupType === 'triset')).toBe(true);
+  });
+
+  it('ungroup deshace el grupo dejando a los miembros sin groupId', async () => {
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id);
+    items = await repository.listPlanExercises(day.id);
+    await repository.ungroup(day.id, items[0].id);
+    items = await repository.listPlanExercises(day.id);
+    expect(items.every((pe) => pe.groupId == null)).toBe(true);
+  });
+
+  it('borrar un miembro degrada un grupo de 2 a ejercicio normal', async () => {
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id); // 1+2 superset
+    items = await repository.listPlanExercises(day.id);
+    await repository.deletePlanExercise(items[0].id);    // borra un miembro
+    items = await repository.listPlanExercises(day.id);
+    // El miembro superviviente ya no es grupo.
+    const survivor = items.find((pe) => pe.exerciseId && pe.groupId);
+    expect(survivor).toBeUndefined();
+  });
+
+  it('duplicatePlanDay remapea groupId (la copia no comparte grupo con el origen)', async () => {
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id);
+    items = await repository.listPlanExercises(day.id);
+    const srcGroupId = items[0].groupId;
+
+    const copy = await repository.duplicatePlanDay(day.id, 'Copia');
+    const copyItems = await repository.listPlanExercises(copy.id);
+    const copyGroupMembers = copyItems.filter((pe) => pe.groupId);
+    expect(copyGroupMembers.length).toBe(2);
+    // Mismo agrupamiento, pero groupId NUEVO (no comparte con el origen).
+    expect(copyGroupMembers[0].groupId).toBe(copyGroupMembers[1].groupId);
+    expect(copyGroupMembers[0].groupId).not.toBe(srcGroupId);
+  });
+
+  it('groupWithNext normaliza targetSets al máximo de los miembros (D17 #3)', async () => {
+    const { day, press, curl } = await setupDayWith3();
+    // Dar distinto nº de series a los dos primeros antes de agrupar.
+    let items = await repository.listPlanExercises(day.id);
+    await repository.savePlanExercise({ ...items[0], targetSets: 4 });
+    await repository.savePlanExercise({ ...items[1], targetSets: 3 });
+    items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id);
+    items = await repository.listPlanExercises(day.id);
+    const grp = items.filter((pe) => pe.groupId);
+    expect(grp.length).toBe(2);
+    expect(grp.every((pe) => pe.targetSets === 4)).toBe(true); // normalizado al máximo
+  });
+
+  it('movePlanExercise mueve el grupo como una unidad sin partirlo (D17 #1)', async () => {
+    const { day } = await setupDayWith3(); // [press(1), curl(2), sent(3)]
+    let items = await repository.listPlanExercises(day.id);
+    // Agrupar curl+sent (posiciones 2 y 3).
+    await repository.groupWithNext(day.id, items[1].id);
+    items = await repository.listPlanExercises(day.id);
+    const groupId = items[1].groupId;
+    expect(items[1].groupId).toBe(groupId);
+    expect(items[2].groupId).toBe(groupId);
+
+    // Subir press (suelto, pos 1) una posición: debe saltar el grupo entero,
+    // no colarse en medio. Resultado esperado: [curl, sent, press].
+    await repository.movePlanExercise(day.id, items[0].id, +1);
+    items = await repository.listPlanExercises(day.id);
+    // El grupo sigue contiguo (posiciones 1 y 2) y press queda al final.
+    expect(items[0].groupId).toBe(groupId);
+    expect(items[1].groupId).toBe(groupId);
+    expect(items[2].groupId == null).toBe(true);
+    expect(items.map((pe) => pe.order)).toEqual([1, 2, 3]);
+  });
+
+  it('entrenar un circuito registra las series de cada ejercicio por vuelta', async () => {
+    const { plan, day, press, curl } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    await repository.groupWithNext(day.id, items[0].id); // press+curl en superserie
+
+    // Simular 2 vueltas: una serie de cada ejercicio por vuelta (setNumber = vuelta).
+    const s = await app.startSession(plan, day);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.logSet({ sessionId: s.id, exercise: curl, setNumber: 1, weight: 20, reps: 10 });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 8 });
+    await app.logSet({ sessionId: s.id, exercise: curl, setNumber: 2, weight: 20, reps: 10 });
+    await repository.finishSession(s.id);
+
+    // Cada ejercicio tiene sus 2 series y su PR, pese a registrarse intercalado.
+    const pressSets = await repository.listSetsForExercise(press.id);
+    const curlSets = await repository.listSetsForExercise(curl.id);
+    expect(pressSets.length).toBe(2);
+    expect(curlSets.length).toBe(2);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(50);
+    expect((await repository.getPR(curl.id, U)).bestWeight).toBe(20);
+    // La sesión cuenta las 4 series.
+    const sess = await repository.getSession(s.id);
+    expect(sess.setCount).toBe(4);
+  });
 });

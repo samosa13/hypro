@@ -100,10 +100,20 @@ export const repository = {
       await db.planDays.put(newDay);
       const exs = (await db.planExercises.where('planDayId').equals(dayId).toArray())
         .sort((a, b) => a.order - b.order);
+      // Remapeo de groupId (D17): si el día tiene superseries/circuitos, la copia
+      // debe tener groupIds NUEVOS para no compartir identidad de grupo con el
+      // origen. Se mapea cada groupId original a uno nuevo, conservando qué
+      // ejercicios van juntos.
+      const groupRemap = new Map();
       for (const pe of exs) {
         // Clona todos los campos salvo id/planDayId (nuevos). Spread primero para
         // arrastrar campos futuros (repMin/repMax, etc.) sin tener que listarlos.
-        await db.planExercises.put({ ...pe, id: uid(), planDayId: newDay.id });
+        const clone = { ...pe, id: uid(), planDayId: newDay.id };
+        if (pe.groupId) {
+          if (!groupRemap.has(pe.groupId)) groupRemap.set(pe.groupId, uid());
+          clone.groupId = groupRemap.get(pe.groupId);
+        }
+        await db.planExercises.put(clone);
       }
       created = newDay;
     });
@@ -121,7 +131,24 @@ export const repository = {
     return record;
   },
   async deletePlanExercise(id) {
-    await db.planExercises.delete(id);
+    await db.transaction('rw', db.planExercises, async () => {
+      const pe = await db.planExercises.get(id);
+      await db.planExercises.delete(id);
+      // Si el borrado deja un grupo (D17) con un solo miembro, ese miembro deja
+      // de ser una superserie: se limpia su groupId para no mostrar un bloque
+      // de un solo ejercicio.
+      if (pe && pe.groupId) {
+        const rest = (await db.planExercises.where('planDayId').equals(pe.planDayId).toArray())
+          .filter((x) => x.groupId === pe.groupId);
+        if (rest.length === 1) {
+          await db.planExercises.update(rest[0].id, { groupId: null, groupType: null });
+        } else if (rest.length >= 2) {
+          // Reajusta groupType al nuevo tamaño del grupo.
+          const groupType = rest.length === 2 ? 'superset' : rest.length === 3 ? 'triset' : 'circuit';
+          for (const m of rest) await db.planExercises.update(m.id, { groupType });
+        }
+      }
+    });
   },
   /**
    * Reordena un ejercicio dentro de su día moviéndolo una posición arriba
@@ -135,22 +162,121 @@ export const repository = {
     await db.transaction('rw', db.planExercises, async () => {
       const items = (await db.planExercises.where('planDayId').equals(planDayId).toArray())
         .sort((a, b) => a.order - b.order);
-      const idx = items.findIndex((pe) => pe.id === planExerciseId);
-      if (idx === -1) return;
-      const target = idx + dir;
-      if (target < 0 || target >= items.length) return; // fuera de límites
-      // Intercambia posiciones en el array y renumera 1..N (contiguo).
-      [items[idx], items[target]] = [items[target], items[idx]];
-      for (let i = 0; i < items.length; i++) {
-        const newOrder = i + 1;
-        if (items[i].order !== newOrder) {
-          await db.planExercises.update(items[i].id, { order: newOrder });
+
+      // Agrupar en UNIDADES de movimiento (peer review D17 #1): un ejercicio
+      // suelto es una unidad; un grupo (superserie/circuito) es UNA sola unidad
+      // que se mueve en bloque. Así reordenar nunca parte un grupo ni mete un
+      // ejercicio ajeno en medio. Los miembros de un grupo son contiguos (lo
+      // garantiza groupWithNext), así que el agrupamiento por recorrido es seguro.
+      const units = [];
+      let i = 0;
+      while (i < items.length) {
+        const pe = items[i];
+        if (pe.groupId) {
+          const members = [];
+          while (i < items.length && items[i].groupId === pe.groupId) { members.push(items[i]); i++; }
+          units.push(members);
+        } else {
+          units.push([pe]); i++;
+        }
+      }
+
+      // Localizar la unidad que contiene el ejercicio pulsado.
+      const uIdx = units.findIndex((u) => u.some((pe) => pe.id === planExerciseId));
+      if (uIdx === -1) return;
+      const target = uIdx + dir;
+      if (target < 0 || target >= units.length) return; // fuera de límites
+
+      // Intercambia unidades completas y renumera 1..N de forma contigua.
+      [units[uIdx], units[target]] = [units[target], units[uIdx]];
+      let order = 1;
+      for (const unit of units) {
+        for (const pe of unit) {
+          if (pe.order !== order) await db.planExercises.update(pe.id, { order });
+          order++;
         }
       }
       changed = true;
     });
     return changed;
   },
+  /**
+   * Agrupa un ejercicio con el SIGUIENTE del día en una superserie/circuito
+   * (D17). Si alguno de los dos ya pertenece a un grupo, el otro se une a ese
+   * grupo (permite construir triseries/circuitos encadenando). Mantiene a los
+   * miembros contiguos por `order` y renumera 1..N. Transaccional.
+   *
+   * Regla de bloque: un `groupId` es un conjunto de ejercicios consecutivos que
+   * se entrenan en rotación. `groupType` se deriva del tamaño ('superset'=2,
+   * 'triset'=3, 'circuit'=4+) y se guarda en todos los miembros para la UI.
+   * @returns {Promise<boolean>} true si se agrupó
+   */
+  async groupWithNext(planDayId, planExerciseId) {
+    let ok = false;
+    await db.transaction('rw', db.planExercises, async () => {
+      const items = (await db.planExercises.where('planDayId').equals(planDayId).toArray())
+        .sort((a, b) => a.order - b.order);
+      const idx = items.findIndex((pe) => pe.id === planExerciseId);
+      if (idx === -1 || idx >= items.length - 1) return; // no hay "siguiente"
+      const a = items[idx];
+      const b = items[idx + 1];
+      // Determinar el groupId resultante: reutiliza el de a o el de b si existe.
+      const groupId = a.groupId || b.groupId || uid();
+      // Miembros del grupo final = a, b y cualquiera que ya compartiera grupo
+      // con alguno de los dos (encadenar triserie/circuito).
+      const memberIds = new Set([a.id, b.id]);
+      for (const pe of items) {
+        if ((a.groupId && pe.groupId === a.groupId) || (b.groupId && pe.groupId === b.groupId)) {
+          memberIds.add(pe.id);
+        }
+      }
+      // Reordenar: llevar todos los miembros a posiciones contiguas, empezando
+      // donde está el primero de ellos. El resto conserva su orden relativo.
+      // INVARIANTE (peer review D17): firstMemberIdx es la posición del PRIMER
+      // miembro en `items`; todo lo anterior es ajeno, así que en ese prefijo el
+      // índice sobre `items` coincide con el índice sobre `rest`. El corte sobre
+      // `rest` con firstMemberIdx es por tanto correcto: inserta el bloque justo
+      // donde estaba el primer miembro.
+      const members = items.filter((pe) => memberIds.has(pe.id));
+      const rest = items.filter((pe) => !memberIds.has(pe.id));
+      const firstMemberIdx = items.findIndex((pe) => memberIds.has(pe.id));
+      const reordered = [...rest.slice(0, firstMemberIdx), ...members, ...rest.slice(firstMemberIdx)];
+      const groupType = members.length === 2 ? 'superset' : members.length === 3 ? 'triset' : 'circuit';
+      // Normalizar el nº de series entre miembros (peer review D17 #3): en una
+      // rotación todos los ejercicios hacen el mismo nº de vueltas. Se adopta el
+      // máximo targetSets de los miembros para no capar a nadie.
+      const groupSets = members.reduce((m, pe) => Math.max(m, pe.targetSets || 0), 0) || 3;
+      for (let i = 0; i < reordered.length; i++) {
+        const pe = reordered[i];
+        const patch = { order: i + 1 };
+        if (memberIds.has(pe.id)) { patch.groupId = groupId; patch.groupType = groupType; patch.targetSets = groupSets; }
+        await db.planExercises.update(pe.id, patch);
+      }
+      ok = true;
+    });
+    return ok;
+  },
+
+  /**
+   * Deshace un grupo (D17): quita groupId/groupType a todos los miembros del
+   * grupo al que pertenece el ejercicio dado. No cambia el orden. Transaccional.
+   * @returns {Promise<boolean>} true si se desagrupó algo
+   */
+  async ungroup(planDayId, planExerciseId) {
+    let ok = false;
+    await db.transaction('rw', db.planExercises, async () => {
+      const pe = await db.planExercises.get(planExerciseId);
+      if (!pe || !pe.groupId) return;
+      const members = (await db.planExercises.where('planDayId').equals(planDayId).toArray())
+        .filter((x) => x.groupId === pe.groupId);
+      for (const m of members) {
+        await db.planExercises.update(m.id, { groupId: null, groupType: null });
+      }
+      ok = true;
+    });
+    return ok;
+  },
+
   /**
    * Todos los planExercises del usuario. planExercises no lleva userId (cuelga
    * de planDay → plan), así que se resuelve la propiedad por sus planes. Se usa

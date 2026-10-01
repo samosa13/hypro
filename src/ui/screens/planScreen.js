@@ -176,6 +176,9 @@ async function openEditDay(root, app, plan, day) {
       if (!ex) return;
       const isFirst = idx === 0;
       const isLast = idx === items.length - 1;
+      // ¿Este ejercicio comparte grupo con el siguiente? (para el indicador visual)
+      const next = items[idx + 1];
+      const samGroupAsNext = pe.groupId && next && next.groupId === pe.groupId;
       // Botones de reordenar (A5): suben/bajan el ejercicio una posición.
       const upBtn = h('button', {
         class: 'btn btn-ghost btn-sm', title: t('plan.moveUp'), disabled: isFirst,
@@ -185,15 +188,34 @@ async function openEditDay(root, app, plan, day) {
         class: 'btn btn-ghost btn-sm', title: t('plan.moveDown'), disabled: isLast,
         onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, +1); paintExercises(); },
       }, '↓');
-      exWrap.appendChild(h('div', { class: 'card row-between' }, [
+      // Agrupar con el siguiente (D17): solo si hay un siguiente y no están ya
+      // en el mismo grupo. Desagrupar si pertenece a un grupo.
+      const groupBtns = [];
+      if (pe.groupId) {
+        groupBtns.push(h('button', {
+          class: 'btn btn-ghost btn-sm', title: t('plan.ungroup'),
+          onClick: async () => { await app.repo.ungroup(day.id, pe.id); paintExercises(); },
+        }, '🔗✕'));
+      } else if (!isLast) {
+        groupBtns.push(h('button', {
+          class: 'btn btn-ghost btn-sm', title: t('plan.groupWithNext'),
+          onClick: async () => { await app.repo.groupWithNext(day.id, pe.id); paintExercises(); },
+        }, '🔗'));
+      }
+      // Etiqueta de grupo (badge) si pertenece a uno.
+      const groupBadge = pe.groupId
+        ? h('span', { class: 'chip', style: 'margin-left:8px' }, t(`train.group.${pe.groupType || 'superset'}`))
+        : null;
+      exWrap.appendChild(h('div', { class: `card row-between${pe.groupId ? ' grouped' : ''}${samGroupAsNext ? ' group-cont' : ''}` }, [
         h('div', { class: 'row' }, [
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
           h('div', {}, [
-            h('div', { style: 'font-weight:700' }, ex.name),
+            h('div', { style: 'font-weight:700' }, [ex.name, groupBadge]),
             h('div', { class: 'muted' }, exerciseMetaText(pe, ex, settings)),
           ]),
         ]),
         h('div', { class: 'row', style: 'gap:4px' }, [
+          ...groupBtns,
           upBtn,
           downBtn,
           h('button', {

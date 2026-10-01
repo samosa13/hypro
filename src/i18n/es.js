@@ -74,6 +74,11 @@ export default {
   'train.saveSet': 'Guardar',
   'train.warmup': 'Calentamiento (no cuenta para récord ni volumen)',
   'train.rirHint': 'RIR: repeticiones en reserva (0 = al fallo). Opcional.',
+  // Superseries / circuitos (D17)
+  'train.group.superset': '🔗 Superserie',
+  'train.group.triset': '🔗 Triserie',
+  'train.group.circuit': '🔗 Circuito',
+  'train.group.round': 'Vuelta {n}',
 
   // --- Plan ---
   'plan.title': 'Mi plan',
@@ -111,6 +116,8 @@ export default {
   'plan.pickFromList': 'Elige un ejercicio de la lista para configurarlo.',
   'plan.moveUp': 'Subir',
   'plan.moveDown': 'Bajar',
+  'plan.groupWithNext': 'Agrupar con el siguiente (superserie)',
+  'plan.ungroup': 'Deshacer grupo',
   'plan.sets': 'Series',
   'plan.targetReps': 'Reps objetivo',
   'plan.repRange': 'Rango de reps',

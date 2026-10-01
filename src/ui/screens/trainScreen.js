@@ -119,10 +119,41 @@ async function renderActiveSession(root, app, ctx) {
   const screen = h('div', { class: 'screen' });
   screen.appendChild(h('div', { class: 'banner week' }, `${pos} · ${day.name}`));
 
-  for (const pe of planExercises) {
-    const ex = exMap[pe.exerciseId];
-    if (!ex) continue;
-    screen.appendChild(await exerciseCard(app, ctx, pe, ex));
+  // Agrupar por superserie/circuito (D17): los planExercises con el mismo
+  // groupId forman un bloque que se entrena en rotación. Los sueltos van como
+  // card individual. Se respeta el orden; los miembros de un grupo son
+  // contiguos (lo garantiza el editor del plan).
+  const blocks = [];
+  let i = 0;
+  while (i < planExercises.length) {
+    const pe = planExercises[i];
+    if (pe.groupId) {
+      const members = [];
+      while (i < planExercises.length && planExercises[i].groupId === pe.groupId) {
+        members.push(planExercises[i]);
+        i++;
+      }
+      blocks.push({ type: 'group', members });
+    } else {
+      blocks.push({ type: 'single', pe });
+      i++;
+    }
+  }
+
+  for (const block of blocks) {
+    if (block.type === 'single') {
+      const ex = exMap[block.pe.exerciseId];
+      if (!ex) continue;
+      screen.appendChild(await exerciseCard(app, ctx, block.pe, ex));
+    } else {
+      const members = block.members.filter((pe) => exMap[pe.exerciseId]);
+      if (members.length === 1) {
+        // Grupo degenerado (quedó un solo miembro válido): card normal.
+        screen.appendChild(await exerciseCard(app, ctx, members[0], exMap[members[0].exerciseId]));
+      } else if (members.length) {
+        screen.appendChild(await groupBlock(app, ctx, members, exMap));
+      }
+    }
   }
 
   // Nota de la sesión (#5): texto libre, se guarda al escribir.
@@ -164,7 +195,13 @@ async function renderActiveSession(root, app, ctx) {
   root.appendChild(screen);
 }
 
-async function exerciseCard(app, ctx, pe, ex) {
+/**
+ * Cabecera de un ejercicio (icono, nombre, PR, última vez, sugerencia) +
+ * prefills/lastEntered. Reutilizable por la card individual y por cada miembro
+ * de un bloque de superserie (D17).
+ * @returns {Promise<{header:HTMLElement, prefills:object, lastEntered:object, tracking:string}>}
+ */
+async function exerciseHeader(app, ctx, pe, ex) {
   const unit = ctx.unit ?? 'kg';
   const tracking = normalizeTracking(ex.tracking); // tipo de medición (D16)
   const pr = await app.repo.getPR(ex.id, app.userId);
@@ -172,8 +209,7 @@ async function exerciseCard(app, ctx, pe, ex) {
   const suggestion = await app.suggestionFor(ex, pe, ctx.session.id);   // #1 sugerencia
   const prevSets = last?.sets ?? [];
 
-  const card = h('div', { class: 'card' });
-  card.appendChild(h('div', { class: 'row' }, [
+  const header = h('div', { class: 'row' }, [
     h('div', { class: 'ex-icon', html: icon(ex.icon) }),
     h('div', {}, [
       h('div', { style: 'font-weight:800' }, ex.name),
@@ -181,32 +217,23 @@ async function exerciseCard(app, ctx, pe, ex) {
       prevSets.length
         ? h('div', { class: 'last-line' }, t('train.lastTime', { sets: prevSets.map((s) => setBrief(s, tracking, unit)).join(' · ') }))
         : null,
-      // Sugerencia de progresión (coach ligero, #1)
       suggestion ? h('div', { class: 'suggestion' }, `💡 ${suggestion.text}`) : null,
     ]),
-  ]));
+  ]);
 
   // Valores por defecto de las series: lo de la última vez, si no el objetivo (#2).
-  // Sin historial, las reps objetivo se acotan al rango configurado del ejercicio
-  // para no prefijar un valor fuera de rango (dato antiguo sin curar).
   // El peso se guarda en kg (canónico) pero se PREFIJA en la unidad del usuario (B11).
   const prefillWeight = kgToDisplay(last ? last.weight : (pe.targetWeight ?? 0), unit);
   const prefillReps = last ? last.reps : targetRepsInRange(pe);
-  // Duración por defecto para ejercicios de tiempo (D16).
-  const prefillDuration = last && last.durationSeconds > 0
-    ? last.durationSeconds
-    : (pe.targetDurationSeconds ?? 30);
-
-  // Filas de series (targetSets). Comparten un "estado previo" para el botón repetir (#3).
-  const setsWrap = h('div', { style: 'margin-top:10px' });
-  const nSets = pe.targetSets || 3;
+  const prefillDuration = last && last.durationSeconds > 0 ? last.durationSeconds : (pe.targetDurationSeconds ?? 30);
+  const prefills = { prefillWeight, prefillReps, prefillDuration, unit, tracking };
+  // Estado "previo" compartido por las filas del MISMO ejercicio (botón repetir).
   const lastEntered = { weight: prefillWeight, reps: prefillReps, durationSeconds: prefillDuration };
-  for (let i = 1; i <= nSets; i++) {
-    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { prefillWeight, prefillReps, prefillDuration, lastEntered, unit, tracking }));
-  }
-  card.appendChild(setsWrap);
+  return { header, prefills, lastEntered, tracking };
+}
 
-  // Nota por ejercicio dentro de la sesión (B8): texto libre, se guarda al salir del campo.
+/** Campo de nota por ejercicio dentro de la sesión (B8). */
+function exerciseNoteInput(app, ctx, ex) {
   const exNote = h('input', {
     type: 'text', class: 'ex-note',
     placeholder: t('train.exerciseNote'),
@@ -214,12 +241,93 @@ async function exerciseCard(app, ctx, pe, ex) {
   });
   exNote.addEventListener('change', async () => {
     await app.setExerciseNote(ctx.session.id, ex.id, exNote.value);
-    // Mantener el objeto de sesión en memoria coherente con lo guardado.
     ctx.session.exerciseNotes = { ...(ctx.session.exerciseNotes ?? {}) };
     if (exNote.value.trim()) ctx.session.exerciseNotes[ex.id] = exNote.value.trim();
     else delete ctx.session.exerciseNotes[ex.id];
   });
-  card.appendChild(exNote);
+  return exNote;
+}
+
+async function exerciseCard(app, ctx, pe, ex) {
+  const { header, prefills, lastEntered } = await exerciseHeader(app, ctx, pe, ex);
+  const card = h('div', { class: 'card' });
+  card.appendChild(header);
+
+  // Filas de series (targetSets). Comparten `lastEntered` para el botón repetir (#3).
+  const setsWrap = h('div', { style: 'margin-top:10px' });
+  const nSets = pe.targetSets || 3;
+  for (let i = 1; i <= nSets; i++) {
+    setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { ...prefills, lastEntered }));
+  }
+  card.appendChild(setsWrap);
+  card.appendChild(exerciseNoteInput(app, ctx, ex));
+  return card;
+}
+
+/**
+ * Bloque de superserie / triserie / circuito (D17). Los ejercicios del grupo se
+ * entrenan en ROTACIÓN: una serie de cada uno por "vuelta", y el descanso solo
+ * se toma al CERRAR la vuelta (tras el último ejercicio del grupo), no entre
+ * ejercicios dentro de la misma vuelta.
+ *
+ * Reutiliza `setRow` tal cual (edición/borrado/warmup/RIR/repetir siguen
+ * funcionando por fila). El nº de vueltas = targetSets del primer miembro. El
+ * descanso al cerrar vuelta usa el restSeconds del último miembro.
+ */
+async function groupBlock(app, ctx, members, exMap) {
+  const groupType = members[0].groupType || 'superset';
+  const rounds = members[0].targetSets || 3;
+  const lastMember = members[members.length - 1];
+
+  const card = h('div', { class: 'card group-block' });
+  // Cabecera del bloque: etiqueta del tipo + nombres de los ejercicios.
+  card.appendChild(h('div', { class: 'group-head', style: 'font-weight:800;margin-bottom:6px' }, [
+    h('span', { class: 'chip' }, t(`train.group.${groupType}`)),
+    h('span', { class: 'muted', style: 'margin-left:8px' }, members.map((m) => exMap[m.exerciseId].name).join(' + ')),
+  ]));
+
+  // Precalcular cabecera/prefills/lastEntered de cada miembro (una vez).
+  const perMember = [];
+  for (const pe of members) {
+    const ex = exMap[pe.exerciseId];
+    const hdr = await exerciseHeader(app, ctx, pe, ex);
+    perMember.push({ pe, ex, ...hdr });
+  }
+
+  // Una sección por vuelta; dentro, una fila por ejercicio del grupo.
+  for (let round = 1; round <= rounds; round++) {
+    const roundWrap = h('div', { class: 'group-round', style: 'margin-top:12px' });
+    roundWrap.appendChild(h('div', { class: 'muted', style: 'font-weight:700;margin-bottom:4px' }, t('train.group.round', { n: round })));
+    // El descanso se toma cuando la VUELTA está completa (todos los miembros
+    // confirmados), no por identidad del último miembro (peer review D17 #2).
+    // Así confirmar en desorden descansa en el momento correcto, una sola vez.
+    const confirmedThisRound = new Set();
+    let restedThisRound = false;
+    const onLogged = ({ pe }) => {
+      confirmedThisRound.add(pe.id);
+      if (!restedThisRound && confirmedThisRound.size >= perMember.length) {
+        restedThisRound = true;
+        startRestTimer(app, lastMember.restSeconds ?? 90);
+      }
+    };
+    for (const m of perMember) {
+      // Mini-etiqueta del ejercicio dentro de la vuelta.
+      roundWrap.appendChild(h('div', { class: 'group-ex-label', style: 'font-size:13px;font-weight:600;margin-top:6px' }, [
+        h('span', { class: 'ex-icon ex-icon-sm', html: icon(m.ex.icon) }),
+        h('span', { style: 'margin-left:6px' }, m.ex.name),
+      ]));
+      roundWrap.appendChild(setRow(app, ctx, m.pe, m.ex, round, { ...m.prefills, lastEntered: m.lastEntered, onLogged }));
+    }
+    card.appendChild(roundWrap);
+  }
+
+  // Notas por ejercicio del grupo (B8), una por miembro, al final del bloque.
+  const notesWrap = h('div', { style: 'margin-top:10px' });
+  for (const m of perMember) {
+    notesWrap.appendChild(h('div', { class: 'muted', style: 'font-size:12px;margin-top:6px' }, m.ex.name));
+    notesWrap.appendChild(exerciseNoteInput(app, ctx, m.ex));
+  }
+  card.appendChild(notesWrap);
   return card;
 }
 
@@ -364,8 +472,15 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     toConfirmedUI();
     if (isPR) { row.classList.add('pr'); celebratePR(ex, set, tracking, unit); }
 
-    // Inicia cronómetro de descanso hacia la siguiente serie
-    startRestTimer(app, pe.restSeconds ?? 90);
+    // Qué descanso iniciar tras confirmar la serie. En un ejercicio normal es
+    // siempre su restSeconds (comportamiento histórico). En una superserie
+    // (D17) el bloque decide: solo se descansa al cerrar la vuelta. Esa decisión
+    // vive en `opts.onLogged`; si no se pasa, se usa el descanso del ejercicio.
+    if (typeof opts.onLogged === 'function') {
+      opts.onLogged({ pe, setNumber });
+    } else {
+      startRestTimer(app, pe.restSeconds ?? 90);
+    }
   }
 
   function edit() {
