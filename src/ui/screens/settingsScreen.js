@@ -74,10 +74,25 @@ export async function renderSettings(root, app) {
   ]));
 
   // --- Backup ---
+  // Aviso de copia externa pendiente (C15): el dominio decide si procede.
+  const reminder = await app.backupReminder();
+  const backupCard = [
+    h('div', { class: 'muted', style: 'margin-bottom:12px' }, t('settings.backupHint')),
+  ];
+  if (reminder.shouldWarn) {
+    const msg = reminder.daysSince == null
+      ? t('settings.backupNever')
+      : t('settings.backupStale', { days: reminder.daysSince });
+    backupCard.push(h('div', {
+      class: 'notice notice-warn',
+      style: 'margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(255,170,0,.14);color:#ffb020;font-weight:700',
+    }, `⚠ ${msg}`));
+  }
+  backupCard.push(h('button', { class: 'btn btn-ghost btn-sm', onClick: exportData }, t('settings.export')));
+
   screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px' }, t('settings.backup')));
   screen.appendChild(h('div', { class: 'card' }, [
-    h('div', { class: 'muted', style: 'margin-bottom:12px' }, t('settings.backupHint')),
-    h('button', { class: 'btn btn-ghost btn-sm', onClick: exportData }, t('settings.export')),
+    ...backupCard,
     h('div', { class: 'spacer' }),
     h('label', { style: 'margin-top:10px' }, t('settings.import')),
     (() => {
@@ -101,7 +116,10 @@ export async function renderSettings(root, app) {
     a.download = `hypro-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    // Marca cuándo se exportó por última vez para apagar el aviso de C15.
+    await app.repo.saveSettings({ ...s, lastExportAt: new Date().toISOString() }, app.userId);
     toast(t('settings.exported'));
+    renderSettings(root, app); // re-render para ocultar el aviso de backup
   }
 
   async function importData(fileInput) {

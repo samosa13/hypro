@@ -192,6 +192,8 @@ export default {
   'settings.saved': 'Ajustes guardados',
   'settings.backup': 'Copia de seguridad',
   'settings.backupHint': 'Tus datos son solo tuyos. Expórtalos a un fichero para guardarlos fuera del móvil.',
+  'settings.backupNever': 'Aún no has exportado ninguna copia. Guarda una fuera del móvil por si lo pierdes o lo cambias.',
+  'settings.backupStale': 'Hace {days} días que no exportas una copia. Conviene guardar una actualizada fuera del móvil.',
   'settings.export': '⬇ Exportar copia (.json)',
   'settings.import': 'Importar copia',
   'settings.exported': 'Copia exportada',

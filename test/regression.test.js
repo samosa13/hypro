@@ -551,4 +551,65 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     await app.bootstrap();
     expect(await repository.countExercises(U)).toBe(SEED_EXERCISES.length);
   });
+
+  // --- C15: aviso de exportar copia de seguridad externa ---
+
+  it('backupReminder no avisa si no hay sesiones válidas aunque nunca se exportara', async () => {
+    await app.bootstrap(); // settings sembrados, sin lastExportAt, sin sesiones
+    const r = await app.backupReminder();
+    expect(r.shouldWarn).toBe(false);
+    expect(r.daysSince).toBe(null);
+  });
+
+  it('backupReminder avisa si hay sesiones válidas y nunca se exportó', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    const r = await app.backupReminder();
+    expect(r.shouldWarn).toBe(true);
+    expect(r.daysSince).toBe(null); // nunca exportó
+  });
+
+  it('backupReminder NO avisa si la última exportación es reciente (<14 días)', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    const recent = new Date(Date.now() - 3 * 86400000).toISOString(); // hace 3 días
+    await repository.saveSettings({ ...(await repository.getSettings(U)), lastExportAt: recent }, U);
+
+    const r = await app.backupReminder();
+    expect(r.shouldWarn).toBe(false);
+    expect(r.daysSince).toBe(3);
+  });
+
+  it('backupReminder vuelve a avisar si la última exportación es antigua (>14 días)', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    const old = new Date(Date.now() - 20 * 86400000).toISOString(); // hace 20 días
+    await repository.saveSettings({ ...(await repository.getSettings(U)), lastExportAt: old }, U);
+
+    const r = await app.backupReminder();
+    expect(r.shouldWarn).toBe(true);
+    expect(r.daysSince).toBe(20);
+  });
+
+  it('backupReminder trata una fecha corrupta como si nunca se hubiera exportado', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    await repository.saveSettings({ ...(await repository.getSettings(U)), lastExportAt: 'no-es-fecha' }, U);
+
+    const r = await app.backupReminder();
+    expect(r.shouldWarn).toBe(true);
+    expect(r.daysSince).toBe(null);
+  });
 });

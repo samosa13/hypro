@@ -515,6 +515,30 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Aviso de copia de seguridad externa (C15, RF-46). El backup diario interno
+     * (tabla `backups`) protege ante errores de la app, pero NO si el usuario
+     * pierde o cambia de móvil: para eso hay que exportar el fichero .json. Este
+     * método decide si mostrar un recordatorio en Ajustes.
+     *
+     * Avisa cuando hay datos que merezca la pena proteger (al menos una sesión
+     * válida) Y nunca se exportó o la última exportación fue hace más de
+     * STALE_DAYS. Umbral fijo (no configurable, decisión de producto).
+     * @returns {Promise<{shouldWarn:boolean, daysSince:number|null}>}
+     */
+    async backupReminder() {
+      const STALE_DAYS = 14;
+      const sessions = await repo.countAllSessions(userId);
+      if (sessions < 1) return { shouldWarn: false, daysSince: null };
+      const settings = await repo.getSettings(userId);
+      const last = settings.lastExportAt ? new Date(settings.lastExportAt) : null;
+      if (!last || Number.isNaN(last.getTime())) {
+        return { shouldWarn: true, daysSince: null };
+      }
+      const daysSince = Math.floor((Date.now() - last.getTime()) / 86400000);
+      return { shouldWarn: daysSince > STALE_DAYS, daysSince };
+    },
+
+    /**
      * Resumen de cierre de una sesión (C12): series de trabajo, volumen total
      * movido (Σ peso×reps en kg) y nº de récords logrados. Las series de
      * calentamiento NO cuentan para series ni volumen (coherente con B9); el
