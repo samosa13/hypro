@@ -10,7 +10,7 @@ import repository from '../data/repository.js';
 import { SEED_EXERCISES } from '../data/seedExercises.js';
 import { APP, DEFAULT_SETTINGS } from '../config/app.config.js';
 import { isNewPR, isTiePR, buildPR, estimate1RM, bestPRFromSets, scoreSet, normalizeTracking, prScore } from './personalRecord.js';
-import { positionForNewSession, currentPosition } from './effectiveWeek.js';
+import { currentPosition } from './effectiveWeek.js';
 import { dateKey } from './dateKey.js';
 
 /**
@@ -215,8 +215,12 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * Registra una serie y evalúa PR (RF-21, RF-26, RF-27).
      * @returns {{set:object, isPR:boolean, pr:object|null}}
      */
-    async logSet({ sessionId, exercise, setNumber, weight, reps, durationSeconds = null, restTakenSeconds = null, isWarmup = false, rir = null }) {
+    async logSet({ sessionId, exercise, setNumber, weight, reps, durationSeconds = null, restTakenSeconds = null, isWarmup = false, rir = null, loggedAt = null }) {
       const currentPR = await repo.getPR(exercise.id, userId);
+      // Registro RETROACTIVO (F2): si viene `loggedAt`, la serie es de una fecha
+      // pasada. En ese caso NO se calcula el descanso por reloj (Date.now() no
+      // aplica a algo que pasó ayer) y la serie se sella con esa fecha.
+      const isPast = !!loggedAt;
       // Tipo de medición del ejercicio (D16): decide cómo se puntúa la serie.
       const tracking = normalizeTracking(exercise.tracking);
       const setForCheck = { weight, reps, durationSeconds };
@@ -227,8 +231,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
 
       // Descanso real estable (peer review #10): medido desde el loggedAt de la
       // última serie ya registrada de la sesión, no desde memoria de la vista.
+      // En registro retroactivo NO se calcula por reloj (se respeta lo que venga,
+      // normalmente null: no sabemos el descanso de una sesión pasada).
       let realRest = restTakenSeconds;
-      if (realRest == null) {
+      if (realRest == null && !isPast) {
         const prevSet = await repo.lastSetOfSession(sessionId);
         if (prevSet) {
           realRest = Math.max(0, Math.round((Date.now() - new Date(prevSet.loggedAt)) / 1000));
@@ -253,6 +259,9 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         // No afecta PR ni volumen; null si el usuario no lo indica.
         rir: Number.isFinite(rir) ? rir : null,
         isPR: newPR,
+        // Fecha de la serie: la pasada (retroactivo) o la de ahora (el repo pone
+        // Date.now() si no se le da). El spread del repo respeta este loggedAt.
+        ...(isPast ? { loggedAt } : {}),
       });
 
       let pr = currentPR;
@@ -369,11 +378,12 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
 
     /** Inicia una sesión calculando su semana/día efectivos (RB-1). */
     async startSession(plan, planDay) {
-      const settings = await repo.getSettings(userId);
-      const sessionsDone = await repo.countSessions(plan.id);
-      const { effectiveWeek, dayNumber } = positionForNewSession(sessionsDone, plan.daysPerWeek);
+      // Opción A: la posición (semana/día) NO se persiste en la sesión. Se
+      // deriva siempre del orden cronológico de sesiones por fecha real
+      // (listValidSessions). Persistir effectiveWeek/dayNumber "al final"
+      // mentía al registrar sesiones a toro pasado y además nadie los leía.
       return repo.startSession(
-        { planId: plan.id, planDayId: planDay.id, effectiveWeek, dayNumber },
+        { planId: plan.id, planDayId: planDay.id },
         userId
       );
     },
@@ -396,13 +406,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const sessionsDone = await repo.countSessions(plan.id);
       const inWeek = sessionsDone % dpw; // sesiones de la semana en curso (0..dpw-1)
       if (inWeek === 0) return new Set(); // semana recién empezada: nada hecho aún
+      // listValidSessions ya viene en orden cronológico estable por fecha+id
+      // (Opción A): las últimas `inWeek` son las de la semana en curso.
       const valid = (await repo.listValidSessions(userId))
-        .filter((s) => s.planId === plan.id)
-        // Orden cronológico con desempate estable por id: evita que sesiones con
-        // el mismo startedAt (p.ej. restauradas de un backup) elijan mal la
-        // ventana de "semana en curso" (peer review F1 #1).
-        .sort((a, b) => (new Date(a.startedAt) - new Date(b.startedAt)) || String(a.id).localeCompare(String(b.id)));
-      // Las últimas `inWeek` sesiones son las de la semana en curso.
+        .filter((s) => s.planId === plan.id);
       const current = valid.slice(valid.length - inWeek);
       return new Set(current.map((s) => s.planDayId).filter(Boolean));
     },
@@ -497,10 +504,9 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       if (completedWeeks === 0) return { week: 0, plateaus: [] };
       const week = completedWeeks; // la última semana completa
 
-      // Sesiones válidas del plan, ordenadas cronológicamente, con sus series.
+      // Sesiones válidas del plan, ya en orden cronológico estable (Opción A).
       const valid = (await repo.listValidSessions(userId))
-        .filter((s) => s.planId === plan.id)
-        .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+        .filter((s) => s.planId === plan.id);
 
       // Índices de sesión que pertenecen a la semana evaluada (1-based).
       const startIdx = (week - 1) * dpw;
@@ -606,9 +612,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const plan = await repo.getActivePlan(userId);
       if (!plan) return { ranking: [], isCompletedWeek: false };
       const dpw = Math.max(1, plan.daysPerWeek);
+      // listValidSessions ya viene en orden cronológico estable por fecha (Opción
+      // A): la agrupación por semana respeta cuándo ocurrió cada sesión.
       const valid = (await repo.listValidSessions(userId))
-        .filter((s) => s.planId === plan.id)
-        .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+        .filter((s) => s.planId === plan.id);
 
       const doneWeeks = Math.floor(valid.length / dpw);
       const weekSessions = valid.slice(doneWeeks * dpw); // resto = semana en curso
@@ -798,6 +805,138 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         plannedCount,
         doneCount,
       });
+    },
+
+    /**
+     * Registra una sesión PASADA con fecha retroactiva (F2): el entreno que
+     * hiciste otro día pero no registraste en su momento (p.ej. te dejaste el
+     * móvil). Crea la sesión sellada con `dateISO` (inicio y fin), registra cada
+     * serie con esa misma fecha (SIN calcular descansos por reloj), recomputa el
+     * PR del/los ejercicio(s) desde el historial completo (para que la fecha del
+     * récord quede correcta aunque esta sesión sea anterior a otras ya hechas) y
+     * persiste la adherencia. Mantiene el modelo de semana efectiva: la sesión
+     * cuenta como una más (avanza la secuencia), igual que si la hubieras hecho.
+     *
+     * NO permite fechas futuras (regla de dominio, además de la UI): a futuro se
+     * entrena en vivo, no se "pre-rellena".
+     *
+     * @param {object} plan plan activo
+     * @param {object} planDay día del plan que se entrenó ese día
+     * @param {string} dateISO fecha de la sesión (ISO). No puede ser futura.
+     * @param {Array<object>} sets series: {exercise, setNumber, weight?, reps?, durationSeconds?, isWarmup?, rir?}
+     * @returns {Promise<{session:object, prs:number}>}
+     */
+    /**
+     * ¿Se puede registrar una sesión pasada en esta fecha? (F2 — barrera de
+     * integridad). Reglas:
+     *  - La fecha debe ser válida y NO futura (a futuro se entrena en vivo).
+     *  - Debe caer en la SEMANA EFECTIVA EN CURSO, no en una ya completada. Con
+     *    el modelo "N sesiones = 1 semana" (Opción A), una sesión pasada es
+     *    segura solo si NO hay ya `dpw` o más sesiones con fecha POSTERIOR a
+     *    ella; de lo contrario caería en una semana cerrada y descuadraría el
+     *    troceo (volumen/estancamiento). En ese caso se RECHAZA con un motivo
+     *    claro, en vez de corromper los datos.
+     * @returns {Promise<{ok:boolean, reason?:string}>}
+     */
+    async canLogPastSession(plan, dateISO) {
+      const when = new Date(dateISO);
+      if (Number.isNaN(when.getTime())) return { ok: false, reason: 'Fecha inválida' };
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      if (when.getTime() > endOfToday.getTime()) {
+        return { ok: false, reason: 'No se puede registrar un entreno a futuro' };
+      }
+      const dpw = Math.max(1, plan.daysPerWeek);
+      const valid = (await repo.listValidSessions(userId)).filter((s) => s.planId === plan.id);
+      // Nº de sesiones ya registradas con fecha POSTERIOR a la propuesta.
+      const laterCount = valid.filter((s) => new Date(s.startedAt).getTime() > when.getTime()).length;
+      // Sesiones que YA ocupan la semana en curso (el bloque parcial del final).
+      // La sesión pasada es segura solo si cae en ese bloque: eso ocurre cuando
+      // NO hay más sesiones posteriores a ella que las que ya hay en la semana en
+      // curso. Si hay más, cruzaría el límite de una semana YA cerrada y
+      // reordenaría su contenido (descuadrando volumen/estancamiento). Umbral
+      // correcto: laterCount > inWeek (no >= dpw). (peer review F2-rev #1)
+      const inWeek = valid.length % dpw;
+      if (laterCount > inWeek) {
+        return {
+          ok: false,
+          reason: 'Ese entreno caería en una semana que ya completaste. Solo puedes registrar entrenos de tu semana en curso.',
+        };
+      }
+      return { ok: true };
+    },
+
+    async logPastSession(plan, planDay, dateISO, sets = []) {
+      // Barrera de integridad (dominio): valida fecha no futura y que la sesión
+      // caiga en la SEMANA EN CURSO (no en una semana ya cerrada), para no
+      // descuadrar el modelo de bloques "N sesiones = 1 semana" (Opción A).
+      const check = await this.canLogPastSession(plan, dateISO);
+      if (!check.ok) throw new Error(check.reason);
+      if (!sets.length) throw new Error('Una sesión necesita al menos una serie');
+      const when = new Date(dateISO);
+
+      const iso = when.toISOString();
+      // Crea la sesión sellada con la fecha pasada (startedAt). La posición
+      // (semana/día) NO se persiste: se deriva del orden por fecha (Opción A),
+      // así esta sesión cae en su semana REAL según `iso`, no al final.
+      const session = await repo.startSession(
+        { planId: plan.id, planDayId: planDay.id, startedAt: iso },
+        userId
+      );
+
+      // Atomicidad (peer review F2-rev): si cualquier paso posterior falla, se
+      // deshace la sesión recién creada y sus series, para no dejar un día a
+      // medio registrar. Dexie no abarca aquí una única transacción porque hay
+      // lógica de dominio (PR/adherencia) entre medias, así que compensamos con
+      // un rollback explícito en el catch.
+      const touchedExercises = new Set();
+      try {
+        // Registra cada serie con la fecha pasada (loggedAt=iso → sin descanso por reloj).
+        for (const s of sets) {
+          await this.logSet({
+            sessionId: session.id,
+            exercise: s.exercise,
+            setNumber: s.setNumber,
+            weight: s.weight,
+            reps: s.reps,
+            durationSeconds: s.durationSeconds,
+            isWarmup: s.isWarmup,
+            rir: s.rir,
+            loggedAt: iso,
+          });
+          touchedExercises.add(s.exercise.id);
+        }
+
+        // Recomputa el PR de cada ejercicio tocado desde TODO su historial: así, si
+        // esta sesión pasada es anterior a otras ya registradas, la fecha del
+        // récord se ajusta a cuándo se logró DE VERDAD (bestPRFromSets desempata
+        // por loggedAt más antiguo). Garantiza veracidad del récord.
+        for (const exId of touchedExercises) {
+          const pr = await this.recomputePR(exId);
+          await this.reconcileSetPRFlags(exId, pr);
+        }
+
+        // Cierra la sesión con la fecha pasada y persiste adherencia.
+        const { skipped, plannedCount, doneCount } = await this.sessionAdherence(session.id);
+        await repo.updateSession(session.id, {
+          finishedAt: iso,
+          skippedExerciseIds: skipped.map((x) => x.id),
+          plannedCount,
+          doneCount,
+        });
+      } catch (err) {
+        // Deshace la sesión parcial y reajusta los PR de los ejercicios tocados
+        // (sus series ya borradas no deben seguir contando para el récord).
+        await repo.deleteSessionCascade(session.id);
+        for (const exId of touchedExercises) {
+          const pr = await this.recomputePR(exId);
+          await this.reconcileSetPRFlags(exId, pr);
+        }
+        throw err;
+      }
+
+      const prs = (await repo.listSetsForSession(session.id)).filter((x) => x.isPR).length;
+      return { session: await repo.getSession(session.id), prs };
     },
 
     /**

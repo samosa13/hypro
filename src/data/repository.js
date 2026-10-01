@@ -16,6 +16,17 @@ const uid = () =>
   (crypto?.randomUUID?.() ??
     'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
 
+/**
+ * Comparación de ids en orden de código (UTF-16), independiente del locale.
+ * Los operadores < / > de JS comparan por unidad de código, no por reglas de
+ * idioma, así que el desempate de sesiones con el mismo startedAt es idéntico
+ * en todos los dispositivos (a diferencia de String.prototype.localeCompare).
+ */
+function cmpId(a, b) {
+  const x = String(a), y = String(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
 export const repository = {
   // ---------- Ejercicios ----------
   async listExercises(userId = APP.defaultUserId) {
@@ -315,9 +326,23 @@ export const repository = {
   async listSessions(userId = APP.defaultUserId) {
     return db.sessions.where('userId').equals(userId).toArray();
   },
-  /** Solo sesiones válidas (con al menos una serie). */
+  /**
+   * Solo sesiones válidas (con al menos una serie), ordenadas CRONOLÓGICAMENTE
+   * por fecha real (`startedAt`) con desempate estable por `id`. Este orden es
+   * la fuente de verdad de la "posición" en el plan (semana efectiva, volumen,
+   * estancamiento): una sesión registrada a toro pasado cae en su semana REAL
+   * según su fecha, no al final por orden de tecleo (Opción A). El desempate por
+   * id da determinismo cuando varias sesiones comparten `startedAt` (p.ej.
+   * restauradas de un backup).
+   */
   async listValidSessions(userId = APP.defaultUserId) {
-    return db.sessions.where('userId').equals(userId).filter((s) => (s.setCount ?? 0) > 0).toArray();
+    const list = await db.sessions.where('userId').equals(userId).filter((s) => (s.setCount ?? 0) > 0).toArray();
+    // Desempate por id en ORDEN DE CÓDIGO (byte-order), no localeCompare: este
+    // último depende del locale del dispositivo y podría reordenar sesiones con
+    // el mismo startedAt de forma distinta en cada móvil (peer review F2-rev).
+    return list.sort((a, b) =>
+      (new Date(a.startedAt) - new Date(b.startedAt)) || cmpId(a.id, b.id)
+    );
   },
   async getSession(sessionId) {
     return db.sessions.get(sessionId);
@@ -364,6 +389,18 @@ export const repository = {
       return true;
     }
     return false;
+  },
+  /**
+   * Borra una sesión y TODAS sus series en una sola transacción, tenga o no
+   * series. Es la red de limpieza del registro retroactivo (F2): si
+   * logPastSession falla a mitad, deshace la sesión parcial para no dejar un
+   * día "fantasma" a medio registrar. Idempotente (si no existe, no hace nada).
+   */
+  async deleteSessionCascade(sessionId) {
+    await db.transaction('rw', db.sessions, db.loggedSets, async () => {
+      await db.loggedSets.where('sessionId').equals(sessionId).delete();
+      await db.sessions.delete(sessionId);
+    });
   },
 
   // ---------- Series registradas ----------

@@ -39,9 +39,19 @@ function makeFakeRepo() {
     },
     async countAllSessions() { return db.sessions.filter((s) => (s.setCount ?? 0) > 0).length; },
     async listSessions() { return [...db.sessions]; },
-    async listValidSessions() { return db.sessions.filter((s) => (s.setCount ?? 0) > 0); },
+    async listValidSessions() {
+      // Mismo contrato que el repo real (Opción A): orden cronológico estable.
+      // Desempate por id en orden de código (byte-order), igual que el repo real.
+      const cmpId = (a, b) => { const x = String(a), y = String(b); return x < y ? -1 : x > y ? 1 : 0; };
+      return db.sessions.filter((s) => (s.setCount ?? 0) > 0)
+        .sort((a, b) => (new Date(a.startedAt) - new Date(b.startedAt)) || cmpId(a.id, b.id));
+    },
     async startSession(session) {
-      const rec = { id: uid(), userId: U, startedAt: new Date().toISOString(), finishedAt: null, setCount: 0, ...session };
+      // startedAt estrictamente creciente para reflejar el orden cronológico real
+      // (en producción cada sesión en vivo tiene una fecha posterior a la anterior).
+      const seq = db.sessions.length;
+      const startedAt = new Date(Date.now() + seq * 1000).toISOString();
+      const rec = { id: uid(), userId: U, startedAt, finishedAt: null, setCount: 0, ...session };
       db.sessions.push(rec);
       return rec;
     },
@@ -66,6 +76,10 @@ function makeFakeRepo() {
         return true;
       }
       return false;
+    },
+    async deleteSessionCascade(id) {
+      db.loggedSets = db.loggedSets.filter((x) => x.sessionId !== id);
+      db.sessions = db.sessions.filter((x) => x.id !== id);
     },
 
     async listSetsForSession(sessionId) { return db.loggedSets.filter((s) => s.sessionId === sessionId); },

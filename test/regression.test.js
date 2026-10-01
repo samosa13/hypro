@@ -919,6 +919,214 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect((await app.currentWeekPlanDayIds(plan)).has(days[2].id)).toBe(true);
   });
 
+  // --- F2: registro de sesión pasada (fecha retroactiva) ---
+
+  const ISO = (d) => d.toISOString();
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+
+  it('logPastSession crea una sesión válida sellada con la fecha pasada', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const fecha = daysAgo(2);
+    const { session, prs } = await app.logPastSession(plan, days[0], ISO(fecha), [
+      { exercise: press, setNumber: 1, weight: 50, reps: 8 },
+      { exercise: press, setNumber: 2, weight: 50, reps: 8 },
+    ]);
+    expect(session.startedAt).toBe(ISO(fecha));
+    expect(session.finishedAt).toBe(ISO(fecha));
+    expect(session.setCount).toBe(2);
+    expect(session.planDayId).toBe(days[0].id);
+    expect(prs).toBe(1); // la primera serie es PR (primer registro)
+    // Cuenta como sesión válida: la secuencia avanza.
+    expect(await repository.countSessions(plan.id)).toBe(1);
+  });
+
+  it('logPastSession rechaza fechas futuras', async () => {
+    const { plan, days } = await setupPlan(1);
+    const manana = new Date(); manana.setDate(manana.getDate() + 1);
+    const exs = await repository.listExercises(U);
+    const press = exs.find((e) => e.name === 'Press banca con barra');
+    await expect(
+      app.logPastSession(plan, days[0], ISO(manana), [{ exercise: press, setNumber: 1, weight: 40, reps: 10 }])
+    ).rejects.toThrow();
+  });
+
+  it('BARRERA: no deja registrar un entreno que caería en una semana YA completada', async () => {
+    // Plan 2 días. Completo la semana en curso con 2 sesiones en vivo (hoy).
+    const { plan, press, days } = await setupPlan(2);
+    for (const d of days) {
+      const s = await app.startSession(plan, d);
+      await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+      await app.finishSession(s.id);
+    }
+    // Intentar cargar algo de hace 10 días: habría 2 sesiones posteriores (dpw=2)
+    // → caería en una semana ya cerrada → la app lo RECHAZA.
+    await expect(
+      app.logPastSession(plan, days[0], ISO(daysAgo(10)), [{ exercise: press, setNumber: 1, weight: 40, reps: 10 }])
+    ).rejects.toThrow(/semana que ya completaste/i);
+
+    // canLogPastSession lo refleja sin lanzar (para que la UI pueda consultarlo).
+    const check = await app.canLogPastSession(plan, ISO(daysAgo(10)));
+    expect(check.ok).toBe(false);
+  });
+
+  it('BARRERA: permite registrar un hueco reciente de la semana en curso', async () => {
+    // Plan 3 días. Hoy hice D2 en vivo (1 sesión). Hay 1 sesión posterior a
+    // "anteayer" (< dpw=3) → cargar D1 de anteayer es válido.
+    const { plan, press, days } = await setupPlan(3);
+    const s2 = await app.startSession(plan, days[1]);
+    await app.logSet({ sessionId: s2.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(s2.id);
+
+    const check = await app.canLogPastSession(plan, ISO(daysAgo(2)));
+    expect(check.ok).toBe(true);
+    // Y de hecho se registra sin error.
+    await expect(
+      app.logPastSession(plan, days[0], ISO(daysAgo(2)), [{ exercise: press, setNumber: 1, weight: 40, reps: 10 }])
+    ).resolves.toBeTruthy();
+  });
+
+  it('BARRERA (contraejemplo peer review): rechaza una fecha INTERCALADA en una semana ya cerrada (dpw=3)', async () => {
+    // Reconstruye el estado que el umbral viejo (laterCount >= dpw) dejaba
+    // colar y descuadraba la semana cerrada: una semana 1 COMPLETA (3 sesiones
+    // reales hace 9/8/7 días) + 1 sesión en curso hoy. Intentar cargar un
+    // entreno a hace ~7,5 días caería DENTRO de la semana 1 ya cerrada,
+    // reordenando su contenido. El umbral correcto (laterCount > valid%dpw) lo
+    // rechaza. Las sesiones históricas se siembran directamente en el repo con
+    // su startedAt real (no vía logPastSession, que es justo lo que validamos).
+    const { plan, press, days } = await setupPlan(3);
+    const sellHistorica = async (planDay, date) => {
+      const iso = ISO(date);
+      const s = await repository.startSession({ planId: plan.id, planDayId: planDay.id, startedAt: iso }, U);
+      await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10, loggedAt: iso });
+      await repository.updateSession(s.id, { finishedAt: iso });
+      return s;
+    };
+    // Semana 1 cerrada: D1/D2/D3 a 9, 8 y 7 días.
+    await sellHistorica(days[0], daysAgo(9));
+    await sellHistorica(days[1], daysAgo(8));
+    await sellHistorica(days[2], daysAgo(7));
+    // Sesión en curso hoy (abre la semana 2).
+    const sHoy = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: sHoy.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.finishSession(sHoy.id);
+
+    // valid.length=4, inWeek=4%3=1. A las 7,5 días hay 2 sesiones posteriores
+    // (la de hace 7 días + la de hoy) → laterCount(2) > inWeek(1) → RECHAZO.
+    // Fecha intercalada precisa (ms), no setDate fraccionado: hace 7 días y medio.
+    const intercalada = new Date(Date.now() - 7.5 * 24 * 60 * 60 * 1000);
+    const check = await app.canLogPastSession(plan, ISO(intercalada));
+    expect(check.ok).toBe(false);
+    expect(check.reason).toMatch(/semana que ya completaste/i);
+    await expect(
+      app.logPastSession(plan, days[1], ISO(intercalada), [{ exercise: press, setNumber: 1, weight: 40, reps: 10 }])
+    ).rejects.toThrow(/semana que ya completaste/i);
+  });
+
+  it('las series de una sesión pasada NO llevan descanso calculado por reloj', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    await app.logPastSession(plan, days[0], ISO(daysAgo(3)), [
+      { exercise: press, setNumber: 1, weight: 40, reps: 10 },
+      { exercise: press, setNumber: 2, weight: 40, reps: 10 },
+    ]);
+    const sets = await repository.listSetsForExercise(press.id);
+    // Ninguna serie retroactiva debe tener restTakenSeconds calculado por reloj.
+    expect(sets.every((s) => s.restTakenSeconds == null)).toBe(true);
+    // Y su loggedAt es la fecha pasada.
+    expect(sets.every((s) => new Date(s.loggedAt) < new Date())).toBe(true);
+  });
+
+  it('un récord logrado en una sesión pasada ANTERIOR fija la fecha correcta del PR', async () => {
+    // Plan de 3 días para que la sesión pasada quepa en la semana en curso
+    // (barrera: no puede haber dpw sesiones posteriores). Hoy hago D1 (PR 60);
+    // el D2 lo hice anteayer y lo cargo (iguala el récord).
+    const { plan, press, days } = await setupPlan(3);
+    const sHoy = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: sHoy.id, exercise: press, setNumber: 1, weight: 60, reps: 5 });
+    await app.finishSession(sHoy.id);
+    const prAntes = await repository.getPR(press.id, U);
+    expect(prAntes.bestWeight).toBe(60);
+
+    // Cargo una sesión de anteayer donde IGUALÉ ese récord (60×5). Al recomputar,
+    // la fecha del récord debe retroceder a la fecha pasada (lo logré ANTES).
+    await app.logPastSession(plan, days[1], ISO(daysAgo(2)), [
+      { exercise: press, setNumber: 1, weight: 60, reps: 5 },
+    ]);
+    const prDespues = await repository.getPR(press.id, U);
+    expect(prDespues.bestWeight).toBe(60);
+    expect(new Date(prDespues.achievedAt) < new Date(prAntes.achievedAt)).toBe(true);
+  });
+
+  it('una sesión pasada que bate el récord actual lo actualiza', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    const sHoy = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: sHoy.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.finishSession(sHoy.id);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(50);
+
+    // Anteayer hice más peso (70) y no lo había registrado (cabe en semana en curso).
+    await app.logPastSession(plan, days[1], ISO(daysAgo(2)), [
+      { exercise: press, setNumber: 1, weight: 70, reps: 5 },
+    ]);
+    const pr = await repository.getPR(press.id, U);
+    expect(pr.bestWeight).toBe(70); // el récord real es 70, de anteayer
+  });
+
+  it('el volumen semanal recoge las series de una sesión pasada', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    await app.logPastSession(plan, days[0], ISO(daysAgo(1)), [
+      { exercise: press, setNumber: 1, weight: 40, reps: 10 },
+      { exercise: press, setNumber: 2, weight: 40, reps: 10 },
+    ]);
+    const { ranking } = await app.weeklyVolume();
+    const pecho = ranking.find((r) => r.muscle === 'pecho');
+    expect(pecho.sets).toBe(2);
+  });
+
+  it('Opción A: rellenar un día de ESTA semana (hueco reciente) ordena por fecha y cuenta en la semana en curso', async () => {
+    // Caso de uso real: plan 3 días. Hoy entreno D2 en vivo, pero el D1 lo hice
+    // anteayer y se me olvidó registrarlo. Lo cargo a toro pasado (2 días atrás).
+    const { plan, press, days } = await setupPlan(3);
+    // D2 en vivo HOY (2 series).
+    const s2 = await app.startSession(plan, days[1]);
+    await app.logSet({ sessionId: s2.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await app.logSet({ sessionId: s2.id, exercise: press, setNumber: 2, weight: 40, reps: 10 });
+    await app.finishSession(s2.id);
+    // D1 de anteayer, cargado ahora (3 series).
+    await app.logPastSession(plan, days[0], ISO(daysAgo(2)), [
+      { exercise: press, setNumber: 1, weight: 40, reps: 10 },
+      { exercise: press, setNumber: 2, weight: 40, reps: 10 },
+      { exercise: press, setNumber: 3, weight: 40, reps: 10 },
+    ]);
+    // Ambas sesiones están en la semana en curso (dpw=3, solo 2 sesiones hechas).
+    // El volumen suma las 5 series de pecho (2 del D2 en vivo + 3 del D1 pasado).
+    const pecho = (await app.weeklyVolume()).ranking.find((r) => r.muscle === 'pecho');
+    expect(pecho.sets).toBe(5);
+    // Y ambos días constan como hechos esta semana (D1 pasado + D2 vivo).
+    const done = await app.currentWeekPlanDayIds(plan);
+    expect(done.has(days[0].id)).toBe(true);
+    expect(done.has(days[1].id)).toBe(true);
+  });
+
+  it('la adherencia de una sesión pasada se calcula y persiste', async () => {
+    // Día con 2 ejercicios; en la sesión pasada solo hice 1.
+    await app.bootstrap();
+    const exs = await repository.listExercises(U);
+    const press = exs.find((e) => e.name === 'Press banca con barra');
+    const curl = exs.find((e) => e.name === 'Curl con barra');
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: press.id, order: 1, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 40, restSeconds: 90 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: curl.id, order: 2, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 20, restSeconds: 90 });
+
+    const { session } = await app.logPastSession(plan, day, ISO(daysAgo(2)), [
+      { exercise: press, setNumber: 1, weight: 50, reps: 8 },
+    ]);
+    expect(session.plannedCount).toBe(2);
+    expect(session.doneCount).toBe(1);
+    expect(session.skippedExerciseIds).toEqual([curl.id]);
+  });
+
   // --- Duración estimada y viabilidad del día (punto 2) ---
 
   it('dayDurationEstimate usa el objetivo del día y avisa si no cabe', async () => {
