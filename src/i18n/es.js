@@ -63,6 +63,8 @@ export default {
   'train.summarySets': 'Series',
   'train.summaryVolume': 'Volumen total',
   'train.summaryPRs': 'Récords',
+  'train.summaryAdherence': 'Hiciste {done} de {planned} ejercicios del plan',
+  'train.summarySkipped': 'Te faltó',
   'train.summaryClose': 'Hecho',
   'train.editSet': 'Editar serie',
   'train.deleteSet': 'Borrar serie',

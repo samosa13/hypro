@@ -326,6 +326,10 @@ export const repository = {
   async finishSession(sessionId) {
     await db.sessions.update(sessionId, { finishedAt: new Date().toISOString() });
   },
+  /** Actualiza campos libres de una sesión (p.ej. adherencia). Sin índice. */
+  async updateSession(sessionId, patch) {
+    await db.sessions.update(sessionId, patch);
+  },
   /** Guarda una nota de texto libre en la sesión (#5). Campo libre, sin índice. */
   async updateSessionNote(sessionId, note) {
     await db.sessions.update(sessionId, { note: note ?? '' });

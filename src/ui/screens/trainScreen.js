@@ -171,8 +171,10 @@ async function renderActiveSession(root, app, ctx) {
       cancelRestTimer();
       const discarded = await app.repo.discardSessionIfEmpty(session.id);
       if (!discarded) {
-        await app.repo.finishSession(session.id);
-        // Resumen de cierre de la sesión (C12): overlay con series, volumen y PRs.
+        // Cierra la sesión (marca fin + persiste adherencia al plan del día).
+        await app.finishSession(session.id);
+        // Resumen de cierre de la sesión (C12 + adherencia): series, volumen, PRs
+        // y cuántos ejercicios del plan se tocaron / cuáles faltaron.
         const summary = await app.sessionSummary(session.id);
         showSessionSummary(summary, ctx.unit ?? 'kg', () => renderTrain(root, app));
       } else {
@@ -628,10 +630,38 @@ function showSessionSummary(summary, unit, onClose) {
           h('div', { class: 'lbl' }, t('train.summaryPRs')),
         ]),
       ]),
+      // Adherencia al plan del día (punto 1): cuántos ejercicios planificados se
+      // tocaron y, si faltó alguno, cuáles. Solo si el día tenía plan.
+      ...adherenceBlock(summary),
       h('button', { class: 'btn', style: 'margin-top:16px', onClick: close }, t('train.summaryClose')),
     ]),
   ]);
   document.body.appendChild(overlay);
+}
+
+/**
+ * Bloque visual de adherencia para el resumen de cierre (punto 1). Devuelve un
+ * array de nodos (vacío si el día no tenía ejercicios planificados). Si se
+ * completaron todos, muestra un mensaje positivo; si faltaron, lista cuáles.
+ */
+function adherenceBlock(summary) {
+  if (!summary.plannedCount) return [];
+  const allDone = summary.doneCount >= summary.plannedCount;
+  const nodes = [
+    h('div', {
+      class: allDone ? 'adherence ok' : 'adherence warn',
+      style: `margin-top:14px;padding:10px 12px;border-radius:10px;font-weight:700;${allDone
+        ? 'background:rgba(49,209,88,.14);color:#31d158'
+        : 'background:rgba(255,170,0,.14);color:#ffb020'}`,
+    }, t('train.summaryAdherence', { done: summary.doneCount, planned: summary.plannedCount })),
+  ];
+  if (!allDone && summary.skipped.length) {
+    nodes.push(h('div', {
+      class: 'adherence-skipped',
+      style: 'margin-top:6px;font-size:13px;color:var(--color-text-muted)',
+    }, `${t('train.summarySkipped')}: ${summary.skipped.map((s) => s.name).join(', ')}`));
+  }
+  return nodes;
 }
 
 /**

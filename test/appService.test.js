@@ -49,6 +49,15 @@ function makeFakeRepo() {
       const s = db.sessions.find((x) => x.id === id);
       if (s) s.finishedAt = new Date().toISOString();
     },
+    // Métodos que usa la adherencia (punto 1) vía sessionSummary/sessionAdherence.
+    async getSession(id) { return db.sessions.find((x) => x.id === id) ?? null; },
+    async updateSession(id, patch) {
+      const s = db.sessions.find((x) => x.id === id);
+      if (s) Object.assign(s, patch);
+    },
+    async listPlanExercises(planDayId) {
+      return (db.planExercises ?? []).filter((pe) => pe.planDayId === planDayId).sort((a, b) => a.order - b.order);
+    },
     async discardSessionIfEmpty(id) {
       const s = db.sessions.find((x) => x.id === id);
       if (s && (s.setCount ?? 0) === 0) {

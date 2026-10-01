@@ -752,6 +752,116 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(await repository.countAllSessions(U)).toBe(0);
   });
 
+  // --- Adherencia al plan del día (punto 1) ---
+
+  /** Monta un plan de 1 día con 3 ejercicios y devuelve {plan, day, ex:[...]}. */
+  async function setupDay3Ex() {
+    await app.bootstrap();
+    const exs = await repository.listExercises(U);
+    const press = exs.find((e) => e.name === 'Press banca con barra');
+    const curl = exs.find((e) => e.name === 'Curl con barra');
+    const sent = exs.find((e) => e.name === 'Sentadilla con barra');
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    let order = 1;
+    for (const ex of [press, curl, sent]) {
+      await repository.savePlanExercise({ planDayId: day.id, exerciseId: ex.id, order: order++, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 40, restSeconds: 90 });
+    }
+    return { plan, day, press, curl, sent };
+  }
+
+  it('sessionAdherence detecta los ejercicios planificados que no se hicieron', async () => {
+    const { plan, day, press, sent } = await setupDay3Ex();
+    const s = await app.startSession(plan, day);
+    // Solo se entrenan 2 de los 3 (Press y Sentadilla; falta Curl).
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.logSet({ sessionId: s.id, exercise: sent, setNumber: 1, weight: 60, reps: 8 });
+    await app.finishSession(s.id);
+
+    const adh = await app.sessionAdherence(s.id);
+    expect(adh.plannedCount).toBe(3);
+    expect(adh.doneCount).toBe(2);
+    expect(adh.skipped.map((x) => x.name)).toEqual(['Curl con barra']);
+  });
+
+  it('sessionSummary incluye la adherencia (done/planned/skipped)', async () => {
+    const { plan, day, press } = await setupDay3Ex();
+    const s = await app.startSession(plan, day);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.finishSession(s.id);
+
+    const sum = await app.sessionSummary(s.id);
+    expect(sum.plannedCount).toBe(3);
+    expect(sum.doneCount).toBe(1);
+    expect(sum.skipped.length).toBe(2);
+  });
+
+  it('finishSession persiste la adherencia en la sesión y NO afecta a la validez/semana', async () => {
+    const { plan, day, press } = await setupDay3Ex();
+    const s = await app.startSession(plan, day);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.finishSession(s.id);
+
+    const saved = await repository.getSession(s.id);
+    expect(saved.plannedCount).toBe(3);
+    expect(saved.doneCount).toBe(1);
+    expect(saved.skippedExerciseIds.length).toBe(2);
+    // La sesión sigue siendo válida (setCount>0) y la semana avanza igual: hacer
+    // 1 de 3 ejercicios NO penaliza (asistencia ≠ productividad). Con daysPerWeek=1,
+    // tras 1 sesión válida la posición pasa a la semana 2 (día 1 de esa semana).
+    expect(saved.setCount).toBe(1);
+    const pos = await app.currentPosition(plan);
+    expect(pos.week).toBe(2); // la semana efectiva avanzó
+  });
+
+  it('un calentamiento cuenta como ejercicio hecho para adherencia', async () => {
+    const { plan, day, press, curl, sent } = await setupDay3Ex();
+    const s = await app.startSession(plan, day);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    await app.logSet({ sessionId: s.id, exercise: curl, setNumber: 1, weight: 20, reps: 10 });
+    // Sentadilla solo con calentamiento: cuenta como "hecho" para adherencia.
+    await app.logSet({ sessionId: s.id, exercise: sent, setNumber: 1, weight: 40, reps: 5, isWarmup: true });
+    await app.finishSession(s.id);
+
+    const adh = await app.sessionAdherence(s.id);
+    expect(adh.doneCount).toBe(3);
+    expect(adh.skipped).toEqual([]);
+  });
+
+  it('adherencia cuenta por ejercicio único, no por fila (ejercicio repetido en el día)', async () => {
+    await app.bootstrap();
+    const press = (await repository.listExercises(U)).find((e) => e.name === 'Press banca con barra');
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'D1', order: 1 });
+    // El MISMO ejercicio dos veces en el día.
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: press.id, order: 1, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 40, restSeconds: 90 });
+    await repository.savePlanExercise({ planDayId: day.id, exerciseId: press.id, order: 2, targetSets: 3, repMin: 8, repMax: 12, targetReps: 10, targetWeight: 40, restSeconds: 90 });
+
+    const s = await app.startSession(plan, day);
+    const adhSkip = await app.sessionAdherence(s.id);
+    // Sin entrenar: cuenta UN ejercicio planificado (no dos), y "faltó" una sola vez.
+    expect(adhSkip.plannedCount).toBe(1);
+    expect(adhSkip.skipped.length).toBe(1);
+
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8 });
+    const adhDone = await app.sessionAdherence(s.id);
+    expect(adhDone.plannedCount).toBe(1);
+    expect(adhDone.doneCount).toBe(1);
+    expect(adhDone.skipped).toEqual([]);
+  });
+
+  it('adherencia vacía si el día no tiene ejercicios planificados', async () => {
+    await app.bootstrap();
+    const plan = await repository.savePlan({ name: 'P', daysPerWeek: 1, isActive: true }, U);
+    await repository.setActivePlan(plan.id, U);
+    const day = await repository.savePlanDay({ planId: plan.id, name: 'Vacío', order: 1 });
+    const s = await repository.startSession({ planId: plan.id, planDayId: day.id }, U);
+    const adh = await app.sessionAdherence(s.id);
+    expect(adh).toEqual({ plannedCount: 0, doneCount: 0, skipped: [] });
+  });
+
   // --- D17: superseries / triseries / circuitos ---
 
   /** Monta un día con 3 ejercicios conocidos y devuelve {day, pes}. */

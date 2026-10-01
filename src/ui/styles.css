@@ -325,6 +325,8 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 .session-summary { max-width: 320px; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
 .summary-grid .metric { padding: 8px; }
+/* Lista de ejercicios no hechos (adherencia, punto 1): acotar altura en móvil. */
+.adherence-skipped { max-height: 120px; overflow-y: auto; }
 .summary-grid .big { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--color-accent); line-height: 1; }
 .summary-grid .lbl { font-size: 11px; color: var(--color-text-muted); font-weight: 600; margin-top: 4px; }
 

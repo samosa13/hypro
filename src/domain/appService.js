@@ -643,18 +643,98 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
-     * Resumen de cierre de una sesión (C12): series de trabajo, volumen total
-     * movido (Σ peso×reps en kg) y nº de récords logrados. Las series de
-     * calentamiento NO cuentan para series ni volumen (coherente con B9); el
-     * volumen se devuelve en kg (la UI lo convierte a la unidad del usuario).
-     * @returns {Promise<{sets:number, totalVolumeKg:number, prs:number}>}
+     * Resumen de cierre de una sesión (C12 + adherencia): series de trabajo,
+     * volumen total movido (Σ peso×reps en kg), nº de récords y ADHERENCIA al
+     * plan del día (cuántos de los ejercicios planificados se tocaron y cuáles
+     * quedaron sin hacer). Las series de calentamiento NO cuentan para series ni
+     * volumen (B9), pero un ejercicio con SOLO calentamiento SÍ cuenta como
+     * "hecho" para adherencia (fuiste y lo tocaste; asistencia ≠ productividad).
+     *
+     * La adherencia no penaliza nada (semana efectiva, racha y validez de la
+     * sesión siguen dependiendo solo de setCount>0): es puramente informativa.
+     * @returns {Promise<{sets:number, totalVolumeKg:number, prs:number,
+     *   plannedCount:number, doneCount:number, skipped:Array<{id:string,name:string}>}>}
      */
     async sessionSummary(sessionId) {
       const all = await repo.listSetsForSession(sessionId);
       const working = all.filter((s) => !s.isWarmup);
       const totalVolumeKg = working.reduce((acc, s) => acc + (s.weight || 0) * (s.reps || 0), 0);
       const prs = all.filter((s) => s.isPR).length;
-      return { sets: working.length, totalVolumeKg: Math.round(totalVolumeKg * 10) / 10, prs };
+
+      // Adherencia: cruza los ejercicios PLANIFICADOS del día (vía session.planDayId)
+      // con los que tienen al menos UNA serie registrada en esta sesión.
+      const adherence = await this.sessionAdherence(sessionId);
+
+      return {
+        sets: working.length,
+        totalVolumeKg: Math.round(totalVolumeKg * 10) / 10,
+        prs,
+        ...adherence,
+      };
+    },
+
+    /**
+     * Adherencia al plan de una sesión: compara los ejercicios planificados del
+     * día (session.planDayId) con los que efectivamente se registraron (≥1
+     * serie). Devuelve el conteo y la lista de los que quedaron sin hacer.
+     *
+     * Nota: la sesión guarda `planDayId` pero NO congela los planExercises; si el
+     * plan se editó tras entrenar, esto refleja el plan ACTUAL del día. Es una
+     * limitación conocida y aceptable (no hay histórico del plan). Si el día ya
+     * no existe o no tiene ejercicios, la adherencia es vacía (plannedCount=0).
+     * @returns {Promise<{plannedCount:number, doneCount:number, skipped:Array<{id,name}>}>}
+     */
+    async sessionAdherence(sessionId) {
+      const session = await repo.getSession(sessionId);
+      if (!session || !session.planDayId) return { plannedCount: 0, doneCount: 0, skipped: [] };
+      const planned = await repo.listPlanExercises(session.planDayId);
+      if (planned.length === 0) return { plannedCount: 0, doneCount: 0, skipped: [] };
+
+      const sets = await repo.listSetsForSession(sessionId);
+      const doneIds = new Set(sets.map((s) => s.exerciseId));
+      const exercises = await repo.listExercises(userId);
+      const nameById = Object.fromEntries(exercises.map((e) => [e.id, e.name]));
+
+      // Se cuenta por EJERCICIO ÚNICO, no por fila (peer review adherencia #1):
+      // si el mismo ejercicio aparece dos veces en el día no debe contar doble
+      // ni duplicarse en la lista de "faltó". En una superserie/circuito (D17)
+      // los miembros tienen exerciseId distintos, así que siguen contando aparte.
+      const plannedIds = [...new Set(planned.map((pe) => pe.exerciseId))];
+      const skipped = plannedIds
+        .filter((id) => !doneIds.has(id))
+        .map((id) => ({ id, name: nameById[id] ?? '—' }));
+      return {
+        plannedCount: plannedIds.length,
+        doneCount: plannedIds.length - skipped.length,
+        skipped,
+      };
+    },
+
+    /**
+     * Cierra una sesión: marca su fin y PERSISTE la adherencia (ids de los
+     * ejercicios planificados que quedaron sin hacer, más plannedCount/doneCount)
+     * como SNAPSHOT del momento de cierre. No penaliza nada: es informativa.
+     *
+     * Fuente de verdad (peer review adherencia #2): el overlay de cierre usa el
+     * RECÁLCULO en vivo (sessionAdherence sobre el plan actual), que coincide con
+     * el snapshot justo al cerrar. El snapshot persistido se guarda a propósito
+     * para un futuro historial de adherencia (y lo aprovechará el punto 2,
+     * duración/viabilidad), donde sí interesa la foto congelada del día aunque
+     * luego se edite el plan. Hoy ninguna pantalla lo lee todavía.
+     *
+     * Debe llamarse en vez de repo.finishSession (que queda solo para tests de
+     * bajo nivel). Las sesiones fantasma se descartan ANTES, así que aquí la
+     * sesión siempre es válida.
+     * @returns {Promise<void>}
+     */
+    async finishSession(sessionId) {
+      const { skipped, plannedCount, doneCount } = await this.sessionAdherence(sessionId);
+      await repo.updateSession(sessionId, {
+        finishedAt: new Date().toISOString(),
+        skippedExerciseIds: skipped.map((s) => s.id),
+        plannedCount,
+        doneCount,
+      });
     },
 
     /**
