@@ -60,6 +60,7 @@ export default {
   'train.setDeleted': 'Serie borrada',
   'train.setUpdated': 'Serie actualizada',
   'train.saveSet': 'Guardar',
+  'train.warmup': 'Calentamiento (no cuenta para récord ni volumen)',
 
   // --- Plan ---
   'plan.title': 'Mi plan',

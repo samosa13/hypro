@@ -62,6 +62,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-38 | 2 | **Volumen semanal por grupo muscular**: nº de series por músculo en la semana en curso (métrica clave de hipertrofia). |
 | RF-39 | 2 | **Nota de sesión**: campo de texto libre por sesión (sensaciones, molestias…). |
 | RF-39b | 2 | **Nota por ejercicio** dentro de la sesión (B8): cada ejercicio tiene su propio campo de texto libre (técnica, molestias puntuales…), guardado en `session.exerciseNotes[exerciseId]`. Independiente de la nota global. |
+| RF-40 | 2 | **Series de calentamiento** (B9): una serie se puede marcar como calentamiento/aproximación (🔥). Se registra pero **NO cuenta para el récord (PR), el volumen semanal, el estancamiento, el autorrelleno ni el historial de 1RM**. Sí cuenta como asistencia (una sesión solo de calentamientos avanza la semana efectiva: fuiste al gym). Flag `isWarmup` por serie, campo libre. |
 
 ### Motivación y notificaciones
 

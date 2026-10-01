@@ -147,11 +147,13 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * Registra una serie y evalúa PR (RF-21, RF-26, RF-27).
      * @returns {{set:object, isPR:boolean, pr:object|null}}
      */
-    async logSet({ sessionId, exercise, setNumber, weight, reps, restTakenSeconds = null }) {
+    async logSet({ sessionId, exercise, setNumber, weight, reps, restTakenSeconds = null, isWarmup = false }) {
       const currentPR = await repo.getPR(exercise.id, userId);
       const setForCheck = { weight, reps };
-      const newPR = isNewPR(setForCheck, currentPR);
-      const tiePR = !newPR && isTiePR(setForCheck, currentPR);
+      // Las series de calentamiento (B9) NO compiten por el récord: no cuentan
+      // como PR ni refrescan su fecha, aunque el 1RM fuese alto.
+      const newPR = !isWarmup && isNewPR(setForCheck, currentPR);
+      const tiePR = !isWarmup && !newPR && isTiePR(setForCheck, currentPR);
 
       // Descanso real estable (peer review #10): medido desde el loggedAt de la
       // última serie ya registrada de la sesión, no desde memoria de la vista.
@@ -172,6 +174,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         weight,
         reps,
         restTakenSeconds: realRest,
+        isWarmup: !!isWarmup,
         isPR: newPR,
       });
 
@@ -211,7 +214,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * existiendo una serie.
      * @returns {Promise<{set:object, pr:object|null}>}
      */
-    async editSet(setId, { weight, reps } = {}) {
+    async editSet(setId, { weight, reps, isWarmup } = {}) {
       const existing = await repo.getSet(setId);
       if (!existing) return { set: null, pr: null, isPR: false };
       // 1RM del récord ANTES de editar, para saber si la edición bate PR.
@@ -221,12 +224,14 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const patch = {};
       if (weight != null) patch.weight = weight;
       if (reps != null) patch.reps = reps;
+      if (isWarmup != null) patch.isWarmup = !!isWarmup; // marcar/desmarcar calentamiento (B9)
       const set = await repo.updateLoggedSet(setId, patch);
       const pr = await this.recomputePR(existing.exerciseId);
       // El flag isPR de cada serie se mantiene coherente con el PR recomputado.
       await this.reconcileSetPRFlags(existing.exerciseId, pr);
       // ¿La edición de ESTA serie estableció un récord nuevo? (para celebrar en UI)
-      const isPR = !!pr && estimate1RM(set.weight, set.reps) >= pr.estimated1RM
+      // Una serie de calentamiento nunca cuenta como récord.
+      const isPR = !set.isWarmup && !!pr && estimate1RM(set.weight, set.reps) >= pr.estimated1RM
         && pr.estimated1RM > rmBefore + 1e-6;
       return { set, pr, isPR };
     },
@@ -314,7 +319,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * @returns {Promise<{points:Array<{date,best1RM,bestWeight,bestReps,sets}>, pr:object|null, totalSets:number}>}
      */
     async exerciseHistory(exerciseId) {
-      const all = await repo.listSetsForExercise(exerciseId);
+      const raw = await repo.listSetsForExercise(exerciseId);
+      // Las series de calentamiento no cuentan para la evolución de 1RM ni para
+      // el total de series "de trabajo" (B9): coherente con PR/volumen.
+      const all = raw.filter((s) => !s.isWarmup);
       // Agrupar por sesión.
       const bySession = new Map();
       for (const s of all) {
@@ -381,7 +389,8 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const setsOf = async (sessionList) => {
         const out = [];
         for (const s of sessionList) out.push(...(await repo.listSetsForSession(s.id)));
-        return out;
+        // Las series de calentamiento no cuentan para el 1RM ni el estancamiento (B9).
+        return out.filter((s) => !s.isWarmup);
       };
       const weekSets = await setsOf(weekSessions);
       const priorSets = await setsOf(priorSessions);
@@ -411,7 +420,8 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      */
     async lastPerformance(exerciseId, excludeSessionId = null) {
       const all = await repo.listSetsForExercise(exerciseId);
-      const prior = all.filter((s) => s.sessionId !== excludeSessionId);
+      // Ignora calentamientos: el autorrelleno/sugerencia parte de series reales (B9).
+      const prior = all.filter((s) => s.sessionId !== excludeSessionId && !s.isWarmup);
       if (prior.length === 0) return null;
       // Sesión previa más reciente.
       const latestId = prior.sort((a, b) => new Date(b.loggedAt) - new Date(a.loggedAt))[0].sessionId;
@@ -469,7 +479,8 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       const sets = [];
       for (const s of target) {
         const ss = await repo.listSetsForSession(s.id);
-        for (const st of ss) sets.push({ muscleGroup: muscleById[st.exerciseId] });
+        // Las series de calentamiento no suman volumen efectivo (B9).
+        for (const st of ss) if (!st.isWarmup) sets.push({ muscleGroup: muscleById[st.exerciseId] });
       }
       const { volumeByMuscle, volumeRanking } = await import('./volume.js');
       return { ranking: volumeRanking(volumeByMuscle(sets)), isCompletedWeek };
@@ -496,7 +507,8 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       for (const s of sessions) {
         const sets = await repo.listSetsForSession(s.id);
         for (const st of sets) {
-          if (typeof st.restTakenSeconds === 'number' && st.restTakenSeconds > 0) {
+          // Los descansos de calentamiento (cortos) no entran en la media (B9).
+          if (!st.isWarmup && typeof st.restTakenSeconds === 'number' && st.restTakenSeconds > 0) {
             restSamples.push(st.restTakenSeconds);
           }
         }

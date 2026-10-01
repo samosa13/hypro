@@ -251,6 +251,10 @@ export const repository = {
     await db.transaction('rw', db.loggedSets, db.sessions, async () => {
       await db.loggedSets.put(record);
       // Incrementa el contador de series de la sesión (criterio de validez).
+      // NOTA (B9): una serie de calentamiento TAMBIÉN cuenta aquí. Es decir, una
+      // sesión compuesta solo de calentamientos se considera "día entrenado"
+      // (avanza semana efectiva y racha) aunque no aporte volumen ni PR. Es un
+      // modelo deliberado de "asistencia ≠ productividad": fuiste al gym.
       const s = await db.sessions.get(record.sessionId);
       if (s) await db.sessions.update(record.sessionId, { setCount: (s.setCount ?? 0) + 1 });
     });

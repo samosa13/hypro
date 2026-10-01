@@ -367,6 +367,81 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(stillCustom.isCustom).toBe(true);
   });
 
+  // --- B9: series de calentamiento ---
+
+  it('una serie de calentamiento NO genera PR ni se persiste como récord', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 100, reps: 10, isWarmup: true });
+    expect(r.isPR).toBe(false);
+    expect(await repository.getPR(press.id, U)).toBe(null); // no hay récord pese al 100kg
+    // La serie se guarda marcada como calentamiento.
+    const sets = await repository.listSetsForExercise(press.id);
+    expect(sets[0].isWarmup).toBe(true);
+  });
+
+  it('tras un calentamiento, una serie real SÍ marca PR (el warmup no lo bloquea)', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10, isWarmup: true });
+    const real = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 8 });
+    expect(real.isPR).toBe(true);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(50);
+  });
+
+  it('las series de calentamiento NO suman al volumen semanal', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10, isWarmup: true });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 8 });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 3, weight: 50, reps: 8 });
+    await repository.finishSession(s.id);
+
+    const { ranking } = await app.weeklyVolume();
+    const pecho = ranking.find((r) => r.muscle === 'pecho');
+    expect(pecho.sets).toBe(2); // 2 series reales, el calentamiento no cuenta
+  });
+
+  it('marcar una serie como calentamiento al editar recomputa el PR', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 80, reps: 5 }); // PR
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 8 });
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(80);
+
+    // Resulta que la de 80 era calentamiento: al marcarla, el PR baja al siguiente real.
+    const { pr } = await app.editSet(r1.set.id, { isWarmup: true });
+    expect(pr.bestWeight).toBe(50);
+  });
+
+  it('exerciseHistory ignora las series de calentamiento (A2+B9)', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 100, reps: 10, isWarmup: true }); // calentón "pesado"
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 8 });
+    await repository.finishSession(s.id);
+
+    const { points, totalSets } = await app.exerciseHistory(press.id);
+    expect(totalSets).toBe(1);                 // solo la serie de trabajo
+    expect(points[0].bestWeight).toBe(50);     // el "mejor 1RM" no lo marca el calentamiento
+  });
+
+  it('una sesión SOLO de calentamientos es válida (asistencia) pero sin volumen ni PR (B9)', async () => {
+    const { plan, press, days } = await setupPlan(3);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10, isWarmup: true });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 10, isWarmup: true });
+    await repository.finishSession(s.id);
+
+    // Cuenta como día entrenado: la semana efectiva avanza.
+    const pos = await app.currentPosition(plan);
+    expect(pos.dayInWeek).toBe(2);
+    // Pero no aporta volumen ni récord.
+    const { ranking } = await app.weeklyVolume();
+    expect(ranking.length).toBe(0);
+    expect(await repository.getPR(press.id, U)).toBe(null);
+  });
+
   // --- B8: notas por ejercicio dentro de la sesión ---
 
   it('setExerciseNote guarda por ejercicio sin pisar otras notas ni la global', async () => {

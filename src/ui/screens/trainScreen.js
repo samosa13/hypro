@@ -200,7 +200,11 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
 
   // Id de la serie una vez persistida (A1): habilita editar/borrar.
   let setId = null;
+  // Estado de calentamiento de la serie (B9): no cuenta para PR ni volumen.
+  let isWarmup = false;
 
+  // Toggle de calentamiento (B9): marca la serie como aproximación.
+  const warmBtn = h('button', { class: 'btn btn-ghost btn-sm warm-toggle', title: t('train.warmup'), onClick: toggleWarmup }, '🔥');
   // Botón "repetir la serie anterior" (#3): copia lo último confirmado.
   const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.repeatSet'), onClick: () => {
     weight.value = String(lastEntered.weight ?? prefillWeight ?? 0);
@@ -214,10 +218,27 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, 'kg'));
   row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+  row.appendChild(warmBtn);
   row.appendChild(repeatBtn);
   row.appendChild(doneBtn);
   row.appendChild(editBtn);
   row.appendChild(delBtn);
+
+  /** Alterna el flag de calentamiento (antes o después de confirmar). */
+  async function toggleWarmup() {
+    isWarmup = !isWarmup;
+    row.classList.toggle('warmup', isWarmup);
+    warmBtn.classList.toggle('active', isWarmup);
+    // Si la serie ya está registrada, persistir el cambio y recomputar PR,
+    // reconciliando el trofeo (.pr) y celebrando si desmarcar la asciende a PR.
+    if (setId) {
+      const { set, pr, isPR } = await app.editSet(setId, { isWarmup });
+      const w = set?.weight ?? 0, r = set?.reps ?? 0;
+      // Una serie de calentamiento nunca lleva trofeo; si no, se marca si es el PR.
+      row.classList.toggle('pr', !isWarmup && isThisThePR(pr, w, r));
+      if (isPR) celebratePR(ex, w, r);
+    }
+  }
 
   /** Pasa la fila a modo "confirmada": inputs bloqueados, botones editar/borrar. */
   function toConfirmedUI() {
@@ -225,6 +246,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     weight.disabled = true; reps.disabled = true;
     doneBtn.style.display = 'none';
     repeatBtn.style.display = 'none';
+    warmBtn.style.display = 'none';
     editBtn.style.display = '';
     delBtn.style.display = '';
   }
@@ -233,6 +255,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     row.classList.remove('done');
     weight.disabled = false; reps.disabled = false;
     doneBtn.style.display = '';
+    warmBtn.style.display = '';
     editBtn.style.display = 'none';
     delBtn.style.display = 'none';
   }
@@ -260,7 +283,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     // El descanso real lo calcula appService desde el loggedAt de la última
     // serie persistida (peer review #10): medida estable, sin estado en la vista.
     const { isPR, set } = await app.logSet({
-      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r,
+      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r, isWarmup,
     });
     setId = set.id;
 
