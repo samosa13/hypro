@@ -504,6 +504,21 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Resumen de cierre de una sesión (C12): series de trabajo, volumen total
+     * movido (Σ peso×reps en kg) y nº de récords logrados. Las series de
+     * calentamiento NO cuentan para series ni volumen (coherente con B9); el
+     * volumen se devuelve en kg (la UI lo convierte a la unidad del usuario).
+     * @returns {Promise<{sets:number, totalVolumeKg:number, prs:number}>}
+     */
+    async sessionSummary(sessionId) {
+      const all = await repo.listSetsForSession(sessionId);
+      const working = all.filter((s) => !s.isWarmup);
+      const totalVolumeKg = working.reduce((acc, s) => acc + (s.weight || 0) * (s.reps || 0), 0);
+      const prs = all.filter((s) => s.isPR).length;
+      return { sets: working.length, totalVolumeKg: Math.round(totalVolumeKg * 10) / 10, prs };
+    },
+
+    /**
      * Estadísticas de descansos reales y duración de sesiones (RF-28, RF-34).
      * @returns {{avgRest:number, restSamples:number[], sessionDurations:Array}}
      */

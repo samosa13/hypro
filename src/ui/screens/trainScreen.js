@@ -120,11 +120,13 @@ async function renderActiveSession(root, app, ctx) {
       const discarded = await app.repo.discardSessionIfEmpty(session.id);
       if (!discarded) {
         await app.repo.finishSession(session.id);
-        toast(t('train.sessionSaved'));
+        // Resumen de cierre de la sesión (C12): overlay con series, volumen y PRs.
+        const summary = await app.sessionSummary(session.id);
+        showSessionSummary(summary, ctx.unit ?? 'kg', () => renderTrain(root, app));
       } else {
         toast(t('train.emptyDiscarded'));
+        renderTrain(root, app);
       }
-      renderTrain(root, app);
     }
   }, t('train.finish')));
 
@@ -417,6 +419,40 @@ async function startRestTimer(app, seconds) {
     toast(t('train.nextSet'));
   }
   function stop() { cancelRestTimer(); }
+}
+
+/**
+ * Resumen de cierre de sesión (C12): overlay con series, volumen total y PRs.
+ * El volumen llega en kg y se muestra en la unidad del usuario. Al cerrar
+ * (botón o click fuera), ejecuta onClose (que vuelve a la pantalla de Entrenar).
+ */
+function showSessionSummary(summary, unit, onClose) {
+  const vol = kgToDisplay(summary.totalVolumeKg, unit);
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; overlay.remove(); onClose(); };
+
+  const overlay = h('div', { class: 'rest-overlay pr-flash' }, [
+    h('div', { class: 'box session-summary' }, [
+      h('div', { class: 'trophy' }, '🎉'),
+      h('div', { class: 'txt' }, t('train.summaryTitle')),
+      h('div', { class: 'summary-grid' }, [
+        h('div', { class: 'metric' }, [
+          h('div', { class: 'big' }, String(summary.sets)),
+          h('div', { class: 'lbl' }, t('train.summarySets')),
+        ]),
+        h('div', { class: 'metric' }, [
+          h('div', { class: 'big' }, `${vol}`),
+          h('div', { class: 'lbl' }, `${t('train.summaryVolume')} (${unitLabel(unit)})`),
+        ]),
+        h('div', { class: 'metric' }, [
+          h('div', { class: 'big' }, String(summary.prs)),
+          h('div', { class: 'lbl' }, t('train.summaryPRs')),
+        ]),
+      ]),
+      h('button', { class: 'btn', style: 'margin-top:16px', onClick: close }, t('train.summaryClose')),
+    ]),
+  ]);
+  document.body.appendChild(overlay);
 }
 
 /** Celebración visual de récord (RF-26). weight ya viene en la unidad de display. */

@@ -312,6 +312,13 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 /* Nota por ejercicio dentro de la sesión (B8) */
 .ex-note { margin-top: 10px; font-size: 13px; }
 
+/* Resumen post-sesión (C12) */
+.session-summary { max-width: 320px; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.summary-grid .metric { padding: 8px; }
+.summary-grid .big { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--color-accent); line-height: 1; }
+.summary-grid .lbl { font-size: 11px; color: var(--color-text-muted); font-weight: 600; margin-top: 4px; }
+
 /* Campo RIR por serie (B10) */
 .rir-input { text-align: center; }
 .rir-input::placeholder { font-size: 11px; letter-spacing: .5px; }

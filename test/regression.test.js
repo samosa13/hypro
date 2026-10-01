@@ -442,6 +442,23 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(await repository.getPR(press.id, U)).toBe(null);
   });
 
+  // --- C12: resumen post-sesión ---
+
+  it('sessionSummary cuenta series de trabajo, volumen (Σ peso×reps) y PRs, sin warmup', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    // 2 series de trabajo (la 1ª es PR por ser la primera) + 1 calentamiento.
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 10 }); // PR, vol 500
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 8 });  // vol 320
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 3, weight: 60, reps: 5, isWarmup: true }); // no cuenta
+    await repository.finishSession(s.id);
+
+    const sum = await app.sessionSummary(s.id);
+    expect(sum.sets).toBe(2);              // calentamiento excluido
+    expect(sum.totalVolumeKg).toBe(820);   // 500 + 320 (el warmup no suma)
+    expect(sum.prs).toBe(1);               // solo la primera serie marcó PR
+  });
+
   // --- B10: RIR (reps en reserva) opcional por serie ---
 
   it('logSet persiste el RIR cuando se indica, y null cuando no', async () => {
