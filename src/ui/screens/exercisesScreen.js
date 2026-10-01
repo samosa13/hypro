@@ -8,6 +8,7 @@ import { MUSCLE_GROUPS, EQUIPMENT_TYPES } from '../../data/seedExercises.js';
 import { ICON_KEYS } from '../icons.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
+import { renderExerciseHistory } from './exerciseHistoryScreen.js';
 
 // Estado de filtros persistente a nivel de módulo (peer review navegación #6):
 // se conserva al volver de crear un ejercicio o cambiar de pestaña.
@@ -66,10 +67,12 @@ export async function renderExercises(root, app) {
       return;
     }
     for (const ex of filtered.sort((a, b) => a.name.localeCompare(b.name))) {
+      // La tarjeta es clicable: abre el historial de evolución del ejercicio (A2).
+      // Al volver, se repinta Ejercicios conservando los filtros (filterState).
       listWrap.appendChild(
-        h('div', { class: 'card row' }, [
+        h('div', { class: 'card row', style: 'cursor:pointer', onClick: () => renderExerciseHistory(root, app, ex, () => renderExercises(root, app)) }, [
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
-          h('div', {}, [
+          h('div', { style: 'flex:1' }, [
             h('div', { style: 'font-weight:700' }, ex.name),
             h('div', { class: 'row', style: 'gap:6px;margin-top:4px' }, [
               h('span', { class: 'chip' }, ex.muscleGroup),
@@ -77,6 +80,7 @@ export async function renderExercises(root, app) {
               ex.isCustom ? h('span', { class: 'chip' }, t('ex.own')) : null,
             ]),
           ]),
+          h('div', { class: 'muted', style: 'font-size:18px' }, '›'),
         ])
       );
     }

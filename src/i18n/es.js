@@ -98,6 +98,19 @@ export default {
   'plan.removeExercise': '¿Quitar "{name}" de este día?',
   'plan.exerciseMeta': '{sets}×{reps} reps · {weight}kg · {rest}s',
 
+  // --- Historial por ejercicio (A2) ---
+  'exh.title': 'Historial',
+  'exh.noData': 'Aún no has registrado series de este ejercicio. ¡Entrénalo y verás tu evolución aquí!',
+  'exh.pr': '🏆 Récord: {reps} reps × {weight}kg ({date})',
+  'exh.noPR': 'Sin récord todavía.',
+  'exh.evolution': 'Evolución (1RM estimado)',
+  'exh.evolutionHint': 'Cada punto es tu mejor serie de esa sesión (1RM estimado = peso × (1 + reps/30)).',
+  'exh.sessions': 'Sesiones ({n})',
+  'exh.sessionLine': 'Mejor: {weight}kg × {reps} · {sets} series',
+  'exh.viewHistory': 'Ver historial',
+  'exh.best1RM': 'Mejor 1RM',
+  'exh.totalSets': 'Series totales',
+
   // --- Ejercicios ---
   'ex.title': 'Ejercicios',
   'ex.searchPh': 'Buscar ejercicio…',

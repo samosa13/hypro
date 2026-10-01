@@ -35,6 +35,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-20 | 1 | Al entrenar, la cabecera muestra `Semana XX · Día N de M`. |
 | RF-21 | 1 | Por cada ejercicio se registra **peso y reps por serie**. |
 | RF-21b | 2 | Una serie ya registrada se puede **editar o borrar** durante la sesión (A1). Al hacerlo, el **PR se recalcula** desde todo el historial del ejercicio (nunca queda congelado en una marca que ya no existe) y, si al editar al alza se bate récord, se **celebra** igual que al registrar. Borrar la única serie de una sesión la descarta (deja de ser válida). |
+| RF-22b | 2 | **Historial por ejercicio** (A2): desde la ficha de un ejercicio se abre una vista con la **evolución del 1RM estimado** (gráfica de línea por sesión) + lista de sesiones con su mejor serie y nº de series. Solo lectura; vuelve a su origen con atrás/Hecho. |
 | RF-22 | 1 | Antes/durante cada ejercicio se muestra el **récord personal con su fecha** y lo hecho la última vez. |
 | RF-23 | 1 | Al terminar una serie, el usuario lanza un **cronómetro de descanso** configurable. |
 | RF-24 | 1 | El cronómetro emite un **bip de aviso** a falta de N segundos (por defecto 10) y avisa al terminar. |

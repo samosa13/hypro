@@ -276,6 +276,45 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Historial de un ejercicio para su pantalla de evolución (A2).
+     * Agrupa todas las series registradas por sesión y, por cada sesión en que
+     * se hizo el ejercicio, calcula la MEJOR serie (por 1RM estimado) y el
+     * volumen (nº de series). Devuelve los puntos en orden cronológico, listos
+     * para graficar la progresión de 1RM/peso, más el PR vigente.
+     * @returns {Promise<{points:Array<{date,best1RM,bestWeight,bestReps,sets}>, pr:object|null, totalSets:number}>}
+     */
+    async exerciseHistory(exerciseId) {
+      const all = await repo.listSetsForExercise(exerciseId);
+      // Agrupar por sesión.
+      const bySession = new Map();
+      for (const s of all) {
+        if (!bySession.has(s.sessionId)) bySession.set(s.sessionId, []);
+        bySession.get(s.sessionId).push(s);
+      }
+      const points = [];
+      for (const [, sets] of bySession) {
+        // Mejor serie de la sesión por 1RM; fecha = la más temprana de la sesión.
+        let best = sets[0];
+        for (const s of sets) {
+          if (estimate1RM(s.weight, s.reps) > estimate1RM(best.weight, best.reps)) best = s;
+        }
+        const date = sets
+          .map((s) => s.loggedAt)
+          .sort((a, b) => new Date(a) - new Date(b))[0];
+        points.push({
+          date,
+          best1RM: Math.round(estimate1RM(best.weight, best.reps) * 10) / 10,
+          bestWeight: best.weight,
+          bestReps: best.reps,
+          sets: sets.length,
+        });
+      }
+      points.sort((a, b) => new Date(a.date) - new Date(b.date));
+      const pr = await repo.getPR(exerciseId, userId);
+      return { points, pr, totalSets: all.length };
+    },
+
+    /**
      * Aviso de estancamiento de la última semana efectiva COMPLETADA (RB-4).
      *
      * Correcciones de la peer review (#2, #3):

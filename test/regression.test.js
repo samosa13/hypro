@@ -224,4 +224,43 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(isPR).toBe(false);
     expect((await repository.getPR(press.id, U)).bestWeight).toBe(80); // PR intacto
   });
+
+  // --- A2: historial por ejercicio ---
+
+  it('exerciseHistory agrupa por sesión, toma la mejor serie y ordena cronológicamente', async () => {
+    const { plan, press, days } = await setupPlan(3);
+
+    // Sesión 1: dos series, mejor 40×10.
+    const s1 = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s1.id, exercise: press, setNumber: 1, weight: 40, reps: 8 });
+    await app.logSet({ sessionId: s1.id, exercise: press, setNumber: 2, weight: 40, reps: 10 });
+    await repository.finishSession(s1.id);
+
+    await new Promise((r) => setTimeout(r, 5)); // garantizar orden temporal
+
+    // Sesión 2: una serie 45×8 (mejor 1RM que la sesión 1).
+    const s2 = await app.startSession(plan, days[1]);
+    await app.logSet({ sessionId: s2.id, exercise: press, setNumber: 1, weight: 45, reps: 8 });
+    await repository.finishSession(s2.id);
+
+    const { points, pr, totalSets } = await app.exerciseHistory(press.id);
+    expect(points).toHaveLength(2);           // una entrada por sesión
+    expect(totalSets).toBe(3);                // 2 + 1 series
+    // Orden cronológico: primero la sesión 1.
+    expect(points[0].bestWeight).toBe(40);
+    expect(points[0].bestReps).toBe(10);      // la mejor serie de la sesión 1
+    expect(points[0].sets).toBe(2);
+    expect(points[1].bestWeight).toBe(45);
+    // El 1RM del segundo punto es mayor (progresión).
+    expect(points[1].best1RM).toBeGreaterThan(points[0].best1RM);
+    expect(pr.bestWeight).toBe(45);
+  });
+
+  it('exerciseHistory de un ejercicio sin series devuelve vacío', async () => {
+    const { press } = await setupPlan(1);
+    const { points, pr, totalSets } = await app.exerciseHistory(press.id);
+    expect(points).toEqual([]);
+    expect(totalSets).toBe(0);
+    expect(pr).toBe(null);
+  });
 });
