@@ -34,6 +34,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 |----|------|-----------|
 | RF-20 | 1 | Al entrenar, la cabecera muestra `Semana XX · Día N de M`. |
 | RF-21 | 1 | Por cada ejercicio se registra **peso y reps por serie**. |
+| RF-21b | 2 | Una serie ya registrada se puede **editar o borrar** durante la sesión (A1). Al hacerlo, el **PR se recalcula** desde todo el historial del ejercicio (nunca queda congelado en una marca que ya no existe) y, si al editar al alza se bate récord, se **celebra** igual que al registrar. Borrar la única serie de una sesión la descarta (deja de ser válida). |
 | RF-22 | 1 | Antes/durante cada ejercicio se muestra el **récord personal con su fecha** y lo hecho la última vez. |
 | RF-23 | 1 | Al terminar una serie, el usuario lanza un **cronómetro de descanso** configurable. |
 | RF-24 | 1 | El cronómetro emite un **bip de aviso** a falta de N segundos (por defecto 10) y avisa al terminar. |
@@ -105,9 +106,13 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
   para comparar objetivamente series con distinto peso/reps.
 - Si el 1RM estimado de la serie **supera** el mejor previo, es PR → celebración +
   se actualiza `personalRecords` con la fecha.
-- **Política de empate:** si el 1RM estimado **iguala** exactamente el récord
-  vigente, NO es récord nuevo (sin celebración), pero SÍ se **refresca la fecha**
-  del récord (volver a alcanzar tu mejor marca mantiene su fecha reciente).
+- **Política de empate (unificada, A1):** si el 1RM estimado **iguala** exactamente
+  el récord vigente, NO es récord nuevo (sin celebración) y la fecha del récord
+  se **mantiene en la del primer logro** (la más antigua), no se adelanta. Esto es
+  coherente con el recálculo de PR al editar/borrar series (`bestPRFromSets`), de
+  modo que tocar cualquier serie no "mueve" la fecha del récord hacia atrás.
+- **Recálculo (A1):** al editar o borrar una serie, el PR se recomputa desde todo
+  el historial del ejercicio; si no queda ninguna serie válida, se elimina el PR.
 
 ### RB-6 · Sesión válida (criterio único)
 - Una sesión cuenta como día entrenado **solo si tiene al menos una serie

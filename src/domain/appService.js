@@ -9,7 +9,7 @@
 import repository from '../data/repository.js';
 import { SEED_EXERCISES } from '../data/seedExercises.js';
 import { APP, DEFAULT_SETTINGS } from '../config/app.config.js';
-import { isNewPR, isTiePR, buildPR, estimate1RM } from './personalRecord.js';
+import { isNewPR, isTiePR, buildPR, estimate1RM, bestPRFromSets } from './personalRecord.js';
 import { positionForNewSession, currentPosition } from './effectiveWeek.js';
 import { dateKey } from './dateKey.js';
 
@@ -149,10 +149,102 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       if (newPR) {
         pr = await repo.savePR(buildPR({ exerciseId: exercise.id, weight, reps, loggedAt: set.loggedAt }, userId));
       } else if (tiePR) {
-        // Empate: refresca la fecha del récord vigente, sin celebrar (peer review #11).
-        pr = await repo.savePR({ ...currentPR, achievedAt: set.loggedAt });
+        // Empate: NO se celebra ni se mueve la fecha. El PR conserva la fecha en
+        // que se logró POR PRIMERA VEZ (la más antigua). Política unificada con
+        // bestPRFromSets (A1 peer review #1): así, al editar/borrar cualquier
+        // serie, recomputePR no "salta" la fecha del récord hacia atrás.
+        pr = currentPR;
       }
       return { set, isPR: newPR, pr };
+    },
+
+    /**
+     * Recalcula y persiste el PR de un ejercicio desde TODO su historial (A1).
+     * Si no queda ninguna serie válida, borra el PR. Devuelve el PR resultante
+     * (o null). Es la red de seguridad tras editar/borrar una serie: el récord
+     * nunca queda "congelado" en una marca que ya no existe.
+     */
+    async recomputePR(exerciseId) {
+      const sets = await repo.listSetsForExercise(exerciseId);
+      const best = bestPRFromSets(sets, exerciseId, userId);
+      if (!best) {
+        await repo.deletePR(exerciseId, userId);
+        return null;
+      }
+      return repo.savePR(best);
+    },
+
+    /**
+     * Edita una serie ya registrada (A1): cambia peso/reps (y opcionalmente
+     * isWarmup) y recomputa el PR del ejercicio por si la serie tocada era la
+     * que lo marcaba (o deja de serlo / pasa a serlo). No cambia setCount: sigue
+     * existiendo una serie.
+     * @returns {Promise<{set:object, pr:object|null}>}
+     */
+    async editSet(setId, { weight, reps } = {}) {
+      const existing = await repo.getSet(setId);
+      if (!existing) return { set: null, pr: null, isPR: false };
+      // 1RM del récord ANTES de editar, para saber si la edición bate PR.
+      const prBefore = await repo.getPR(existing.exerciseId, userId);
+      const rmBefore = prBefore?.estimated1RM ?? 0;
+
+      const patch = {};
+      if (weight != null) patch.weight = weight;
+      if (reps != null) patch.reps = reps;
+      const set = await repo.updateLoggedSet(setId, patch);
+      const pr = await this.recomputePR(existing.exerciseId);
+      // El flag isPR de cada serie se mantiene coherente con el PR recomputado.
+      await this.reconcileSetPRFlags(existing.exerciseId, pr);
+      // ¿La edición de ESTA serie estableció un récord nuevo? (para celebrar en UI)
+      const isPR = !!pr && estimate1RM(set.weight, set.reps) >= pr.estimated1RM
+        && pr.estimated1RM > rmBefore + 1e-6;
+      return { set, pr, isPR };
+    },
+
+    /**
+     * Borra una serie ya registrada (A1): la elimina, ajusta el setCount de la
+     * sesión (lo hace el repo) y recomputa el PR del ejercicio. Si la sesión se
+     * queda sin series, deja de ser válida automáticamente (setCount=0).
+     * @returns {Promise<{pr:object|null, sessionEmptied:boolean}>}
+     */
+    async removeSet(setId) {
+      const existing = await repo.getSet(setId);
+      if (!existing) return { pr: null, sessionEmptied: false };
+      await repo.deleteLoggedSet(setId);
+      const pr = await this.recomputePR(existing.exerciseId);
+      await this.reconcileSetPRFlags(existing.exerciseId, pr);
+      // Si al borrar la sesión se quedó sin series, se descarta aquí mismo para
+      // no dejar sesiones fantasma colgando (A1 peer review #5): el barrido ya
+      // no depende de que el usuario pulse Terminar/Salir.
+      const session = await repo.getSession(existing.sessionId);
+      const sessionEmptied = session ? (session.setCount ?? 0) === 0 : false;
+      if (sessionEmptied) await repo.discardSessionIfEmpty(existing.sessionId);
+      return { pr, sessionEmptied };
+    },
+
+    /**
+     * Marca con isPR=true solo la serie que corresponde al PR vigente del
+     * ejercicio y a false el resto, tras recomputar. Mantiene coherente el flag
+     * que usa la UI para pintar la serie-récord.
+     */
+    async reconcileSetPRFlags(exerciseId, pr) {
+      const sets = await repo.listSetsForExercise(exerciseId);
+      // Candidatas: las que casan 1RM + fecha con el PR. Puede haber más de una
+      // si comparten 1RM y timestamp (p.ej. backup restaurado). Marcamos UNA
+      // sola (la de menor id, determinista) para no pintar dos trofeos (#4).
+      const matches = pr
+        ? sets.filter((s) =>
+            !s.isWarmup &&
+            Math.abs(estimate1RM(s.weight, s.reps) - pr.estimated1RM) < 1e-6 &&
+            new Date(s.loggedAt).getTime() === new Date(pr.achievedAt).getTime())
+        : [];
+      const chosenId = matches.length
+        ? matches.map((s) => s.id).sort()[0]
+        : null;
+      for (const s of sets) {
+        const isThePR = s.id === chosenId;
+        if (!!s.isPR !== isThePR) await repo.updateLoggedSet(s.id, { isPR: isThePR });
+      }
     },
 
     /** Inicia una sesión calculando su semana/día efectivos (RB-1). */

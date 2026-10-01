@@ -123,6 +123,9 @@ export const repository = {
   async listValidSessions(userId = APP.defaultUserId) {
     return db.sessions.where('userId').equals(userId).filter((s) => (s.setCount ?? 0) > 0).toArray();
   },
+  async getSession(sessionId) {
+    return db.sessions.get(sessionId);
+  },
   async startSession(session, userId = APP.defaultUserId) {
     const record = { id: uid(), userId, startedAt: new Date().toISOString(), finishedAt: null, setCount: 0, ...session };
     await db.sessions.put(record);
@@ -180,6 +183,33 @@ export const repository = {
       if (s) await db.sessions.update(record.sessionId, { setCount: (s.setCount ?? 0) + 1 });
     });
     return record;
+  },
+  async getSet(setId) {
+    return db.loggedSets.get(setId);
+  },
+  /** Actualiza campos de una serie ya registrada (editar peso/reps, etc.). */
+  async updateLoggedSet(setId, patch) {
+    await db.loggedSets.update(setId, patch);
+    return db.loggedSets.get(setId);
+  },
+  /**
+   * Borra una serie registrada y decrementa el `setCount` de su sesión (el
+   * criterio de "sesión válida"). No baja de 0. No recomputa el PR: eso lo hace
+   * el appService, que conoce el dominio.
+   */
+  async deleteLoggedSet(setId) {
+    await db.transaction('rw', db.loggedSets, db.sessions, async () => {
+      const set = await db.loggedSets.get(setId);
+      if (!set) return;
+      await db.loggedSets.delete(setId);
+      const s = await db.sessions.get(set.sessionId);
+      if (s) await db.sessions.update(set.sessionId, { setCount: Math.max(0, (s.setCount ?? 1) - 1) });
+    });
+  },
+  /** Elimina el PR de un ejercicio (cuando ya no queda ninguna serie válida). */
+  async deletePR(exerciseId, userId = APP.defaultUserId) {
+    const existing = await this.getPR(exerciseId, userId);
+    if (existing) await db.personalRecords.delete(existing.id);
   },
 
   // ---------- Récords personales ----------

@@ -3,7 +3,7 @@
  * RF-20..RF-27: cabecera Semana XX·Día N de M, PR con fecha, logging rápido,
  * cronómetro de descanso con bip, celebración de récord.
  */
-import { h, clear, toast } from '../dom.js';
+import { h, clear, toast, confirmDialog } from '../dom.js';
 import { icon } from '../icons.js';
 import { positionLabel } from '../../domain/effectiveWeek.js';
 import { formatDate } from '../../domain/dateKey.js';
@@ -183,18 +183,44 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const reps = h('input', { type: 'number', min: '0', value: String(prefillReps ?? 0), style: 'width:70px' });
   const row = h('div', { class: 'set-row' });
 
+  // Id de la serie una vez persistida (A1): habilita editar/borrar.
+  let setId = null;
+
   // Botón "repetir la serie anterior" (#3): copia lo último confirmado.
   const repeatBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.repeatSet'), onClick: () => {
     weight.value = String(lastEntered.weight ?? prefillWeight ?? 0);
     reps.value = String(lastEntered.reps ?? prefillReps ?? 0);
   } }, '⟲');
-  const doneBtn = h('button', { class: 'btn btn-sm', onClick: confirm }, '✓');
+  const doneBtn = h('button', { class: 'btn btn-sm', title: t('train.saveSet'), onClick: confirm }, '✓');
+  // Botones de edición/borrado, ocultos hasta que la serie está confirmada (A1).
+  const editBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.editSet'), style: 'display:none', onClick: edit }, '✎');
+  const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.deleteSet'), style: 'display:none', onClick: remove }, '🗑');
 
   row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, 'kg'));
   row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
   row.appendChild(repeatBtn);
   row.appendChild(doneBtn);
+  row.appendChild(editBtn);
+  row.appendChild(delBtn);
+
+  /** Pasa la fila a modo "confirmada": inputs bloqueados, botones editar/borrar. */
+  function toConfirmedUI() {
+    row.classList.add('done');
+    weight.disabled = true; reps.disabled = true;
+    doneBtn.style.display = 'none';
+    repeatBtn.style.display = 'none';
+    editBtn.style.display = '';
+    delBtn.style.display = '';
+  }
+  /** Pasa la fila a modo "edición": inputs activos, botón guardar visible. */
+  function toEditingUI() {
+    row.classList.remove('done');
+    weight.disabled = false; reps.disabled = false;
+    doneBtn.style.display = '';
+    editBtn.style.display = 'none';
+    delBtn.style.display = 'none';
+  }
 
   async function confirm() {
     const w = parseFloat(weight.value) || 0;
@@ -205,22 +231,60 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     lastEntered.weight = w;
     lastEntered.reps = r;
 
+    if (setId) {
+      // Edición de una serie ya registrada (A1): no crea serie nueva ni timer.
+      const { pr, isPR } = await app.editSet(setId, { weight: w, reps: r });
+      row.classList.toggle('pr', isThisThePR(pr, w, r));
+      toConfirmedUI();
+      // Si al corregir se bate récord, se celebra igual que al registrar (#3).
+      if (isPR) celebratePR(ex, w, r);
+      else toast(t('train.setUpdated'));
+      return;
+    }
+
     // El descanso real lo calcula appService desde el loggedAt de la última
     // serie persistida (peer review #10): medida estable, sin estado en la vista.
-    const { isPR } = await app.logSet({
+    const { isPR, set } = await app.logSet({
       sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r,
     });
+    setId = set.id;
 
-    row.classList.add('done');
-    weight.disabled = true; reps.disabled = true; doneBtn.disabled = true;
-
+    toConfirmedUI();
     if (isPR) { row.classList.add('pr'); celebratePR(ex, w, r); }
 
     // Inicia cronómetro de descanso hacia la siguiente serie
     startRestTimer(app, pe.restSeconds ?? 90);
   }
 
+  function edit() {
+    cancelRestTimer(); // editar no debería competir con el descanso en curso
+    toEditingUI();
+  }
+
+  async function remove() {
+    const w = parseFloat(weight.value) || 0;
+    const r = parseInt(reps.value) || 0;
+    const ok = await confirmDialog(t('train.deleteSetConfirm', { weight: w, reps: r }), { confirmText: t('common.delete') });
+    if (!ok) return;
+    if (setId) await app.removeSet(setId);
+    // Si lo que se repite en filas hermanas eran los valores de ESTA serie,
+    // devolverlos al prefill para no sugerir datos de una serie borrada (#6).
+    if (lastEntered.weight === w && lastEntered.reps === r) {
+      lastEntered.weight = prefillWeight;
+      lastEntered.reps = prefillReps;
+    }
+    row.remove();
+    toast(t('train.setDeleted'));
+  }
+
   return row;
+}
+
+/** ¿La serie (w×r) es la que marca el PR vigente del ejercicio? */
+function isThisThePR(pr, w, r) {
+  if (!pr) return false;
+  const rm = w * (1 + r / 30);
+  return Math.abs(rm - pr.estimated1RM) < 1e-6;
 }
 
 /** Cronómetro de descanso con bip a falta de N segundos (RF-24). */

@@ -68,3 +68,35 @@ export function buildPR(set, userId) {
     achievedAt: set.loggedAt,
   };
 }
+
+/**
+ * Recalcula el MEJOR récord de un ejercicio a partir de TODO su historial de
+ * series (RB-2). Se usa al editar o borrar una serie ya registrada: si la serie
+ * tocada era la que marcaba el PR, el récord debe recomputarse desde cero sobre
+ * lo que quede, no quedarse "congelado" en una marca que ya no existe.
+ *
+ * El mejor PR es el de mayor 1RM estimado. En caso de empate de 1RM, se queda
+ * con el logrado ANTES (fecha más antigua), que es cuando se consiguió la marca
+ * por primera vez. Las series de calentamiento (isWarmup) no cuentan.
+ *
+ * @param {Array<{exerciseId:string, weight:number, reps:number, loggedAt:string, isWarmup?:boolean}>} sets
+ * @param {string} exerciseId
+ * @param {string} userId
+ * @returns {object|null} registro de PR (como buildPR) o null si no queda ninguna serie válida
+ */
+export function bestPRFromSets(sets, exerciseId, userId) {
+  let best = null;
+  for (const s of sets) {
+    if (s.isWarmup) continue;
+    const rm = estimate1RM(s.weight, s.reps);
+    if (rm <= 0) continue;
+    if (
+      !best ||
+      rm > best.estimated1RM ||
+      (Math.abs(rm - best.estimated1RM) < 1e-6 && new Date(s.loggedAt) < new Date(best.achievedAt))
+    ) {
+      best = { ...buildPR({ exerciseId, weight: s.weight, reps: s.reps, loggedAt: s.loggedAt }, userId) };
+    }
+  }
+  return best;
+}

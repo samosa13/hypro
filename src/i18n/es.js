@@ -53,6 +53,12 @@ export default {
   'train.nextSet': '¡A por la siguiente serie!',
   'train.repeatSet': 'Repetir última serie',
   'train.newRecord': '¡NUEVO RÉCORD!',
+  'train.editSet': 'Editar serie',
+  'train.deleteSet': 'Borrar serie',
+  'train.deleteSetConfirm': '¿Borrar esta serie ({weight}kg × {reps})?',
+  'train.setDeleted': 'Serie borrada',
+  'train.setUpdated': 'Serie actualizada',
+  'train.saveSet': 'Guardar',
 
   // --- Plan ---
   'plan.title': 'Mi plan',

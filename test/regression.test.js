@@ -150,4 +150,78 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(suggestion.reps).toBe(11);
     expect(suggestion.weight).toBe(40);
   });
+
+  // --- A1: editar / borrar una serie ya registrada ---
+
+  it('editar a la baja la serie-récord recomputa el PR', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 60, reps: 5 }); // PR fuerte
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 8 });            // menor
+    await repository.finishSession(s.id);
+
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(60);
+
+    // Corrijo la serie-récord: me había equivocado, eran 40×8 no 60×5.
+    const { pr } = await app.editSet(r1.set.id, { weight: 40, reps: 8 });
+    // El PR ya no puede ser 60; recomputa al mejor de lo que queda (40×8).
+    expect(pr.bestWeight).toBe(40);
+    expect(pr.repsAtBest).toBe(8);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(40);
+  });
+
+  it('borrar la serie-récord recalcula el PR al siguiente mejor', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 60, reps: 5 });
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 50, reps: 6 });
+    await repository.finishSession(s.id);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(60);
+
+    const { pr } = await app.removeSet(r1.set.id);
+    expect(pr.bestWeight).toBe(50);
+    expect(pr.repsAtBest).toBe(6);
+    // La sesión sigue siendo válida (queda una serie).
+    const sess = await repository.getSession(s.id);
+    expect(sess.setCount).toBe(1);
+  });
+
+  it('borrar la única serie vacía la sesión y elimina el PR', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 55, reps: 7 });
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(55);
+
+    const { pr, sessionEmptied } = await app.removeSet(r1.set.id);
+    expect(pr).toBe(null);                 // ya no queda ninguna serie → sin PR
+    expect(sessionEmptied).toBe(true);     // sesión sin series (fantasma)
+    expect(await repository.getPR(press.id, U)).toBe(null);
+    // La sesión vacía se descarta en removeSet (peer review A1 #5): no queda fantasma.
+    expect(await repository.getSession(s.id)).toBeUndefined();
+  });
+
+  it('editar al alza una serie crea/actualiza el PR hacia arriba y marca isPR', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 8 });
+    await repository.finishSession(s.id);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(40);
+
+    const { pr, isPR } = await app.editSet(r1.set.id, { weight: 70, reps: 5 });
+    expect(pr.bestWeight).toBe(70);
+    expect(pr.repsAtBest).toBe(5);
+    expect(isPR).toBe(true); // la corrección batió récord → se celebra en UI
+  });
+
+  it('editar sin batir récord no marca isPR', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 80, reps: 5 }); // PR alto
+    const r2 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 8 });
+    await repository.finishSession(s.id);
+
+    const { isPR } = await app.editSet(r2.set.id, { weight: 42, reps: 8 }); // sigue por debajo
+    expect(isPR).toBe(false);
+    expect((await repository.getPR(press.id, U)).bestWeight).toBe(80); // PR intacto
+  });
 });

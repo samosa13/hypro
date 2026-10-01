@@ -135,16 +135,18 @@ describe('appService · PR y empate (#11)', () => {
     expect(r2.isPR).toBe(true);
   });
 
-  it('empatar el 1RM no es PR nuevo pero refresca la fecha', async () => {
+  it('empatar el 1RM no es PR nuevo y conserva la fecha original (política unificada A1)', async () => {
     const s = await app.startSession(ctx.plan, ctx.day);
-    const first = await app.logSet({ sessionId: s.id, exercise: ctx.ex, setNumber: 1, weight: 40, reps: 10 });
+    await app.logSet({ sessionId: s.id, exercise: ctx.ex, setNumber: 1, weight: 40, reps: 10 });
     const firstDate = (await repo.getPR('ex1')).achievedAt;
     // misma marca más tarde
     await new Promise((r) => setTimeout(r, 5));
     const tie = await app.logSet({ sessionId: s.id, exercise: ctx.ex, setNumber: 2, weight: 40, reps: 10 });
     expect(tie.isPR).toBe(false);
     const newDate = (await repo.getPR('ex1')).achievedAt;
-    expect(new Date(newDate).getTime()).toBeGreaterThanOrEqual(new Date(firstDate).getTime());
+    // El PR mantiene la fecha de cuando se logró POR PRIMERA VEZ (no salta).
+    // Coherente con bestPRFromSets, para que editar/borrar no mueva la fecha.
+    expect(newDate).toBe(firstDate);
   });
 });
 
