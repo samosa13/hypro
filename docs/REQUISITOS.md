@@ -23,6 +23,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-10 | 1 | El usuario indica cuántas veces por semana entrena (1..7). |
 | RF-11 | 1 | Cada día del plan tiene un **nombre libre** ("Full Body", "Empuje"...). |
 | RF-12 | 1 | El usuario selecciona los ejercicios que componen cada día y su orden de ejecución. |
+| RF-12b | 2 | El selector de ejercicios al editar un día ofrece **búsqueda por nombre, filtro por grupo muscular e icono por ejercicio** (A4), en lugar de un desplegable plano. Al elegir uno se configuran series/rango de reps/peso/descanso en el sitio. |
 | RF-13 | 1 | Por cada ejercicio del día se configura: nº de series (por defecto 3, configurable), reps objetivo, peso objetivo y descanso. |
 | RF-14 | 1 | El usuario puede **modificar un día** (añadir/quitar/reordenar ejercicios, renombrar) en cualquier momento **sin perder el historial** ya registrado. |
 | RF-15 | 3 | El usuario puede tener **varios planes** y activar uno. |

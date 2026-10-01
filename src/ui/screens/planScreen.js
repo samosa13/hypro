@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
 import { deriveRepRange, normalizeRepRange } from '../../domain/progression.js';
+import { MUSCLE_GROUPS } from '../../data/seedExercises.js';
 
 /** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
 function repRangeLabel(pe) {
@@ -161,55 +162,124 @@ async function openEditDay(root, app, plan, day) {
   }
   await paintExercises();
 
-  // Añadir ejercicio
-  const picker = h('select', {}, [
-    h('option', { value: '' }, t('plan.pickExercise')),
-    ...allExercises.sort((a, b) => a.name.localeCompare(b.name)).map((e) => h('option', { value: e.id }, e.name)),
-  ]);
+  // --- Añadir ejercicio: selector rico (búsqueda + filtro músculo + iconos) (A4) ---
+  // Estado local del selector: ejercicio elegido y filtros.
+  const pick = { exerciseId: '', q: '', muscle: '' };
+
   const sets = h('input', { type: 'number', min: '1', value: String(settings.defaultSets) });
   const repMin = h('input', { type: 'number', min: '1', value: '8' });
   const repMax = h('input', { type: 'number', min: '1', value: '12' });
   const weight = h('input', { type: 'number', min: '0', step: '0.5', value: '20' });
   const rest = h('input', { type: 'number', min: '0', value: String(settings.defaultRestSeconds) });
 
-  screen.appendChild(h('div', { class: 'card' }, [
-    h('label', {}, t('plan.addExercise')), picker,
-    h('div', { class: 'grid2', style: 'margin-top:8px' }, [
+  const search = h('input', { type: 'search', placeholder: t('plan.searchExercise') });
+  const muscleSel = h('select', {}, [
+    h('option', { value: '' }, t('plan.allMuscles')),
+    ...MUSCLE_GROUPS.map((m) => h('option', { value: m }, m)),
+  ]);
+  const pickList = h('div', { class: 'list-scroll picker-list' });
+  // Zona de configuración (series/rango/peso/descanso), visible solo al elegir.
+  const configWrap = h('div', {});
+
+  function renderConfig() {
+    clear(configWrap);
+    if (!pick.exerciseId) {
+      configWrap.appendChild(h('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' }, t('plan.pickFromList')));
+      return;
+    }
+    const ex = exMap[pick.exerciseId];
+    configWrap.appendChild(h('div', { class: 'row-between', style: 'margin-top:4px' }, [
+      h('div', { class: 'row' }, [
+        h('div', { class: 'ex-icon', html: icon(ex.icon) }),
+        h('div', { style: 'font-weight:700' }, ex.name),
+      ]),
+      h('button', { class: 'btn btn-ghost btn-sm', onClick: () => { pick.exerciseId = ''; renderConfig(); paintPicker(); } }, t('plan.changeExercise')),
+    ]));
+    configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.sets')), sets]),
       h('div', {}, [h('label', {}, t('plan.weightKg')), weight]),
-    ]),
-    h('label', { style: 'margin-top:8px' }, t('plan.repRange')),
-    h('div', { class: 'grid2' }, [
+    ]));
+    configWrap.appendChild(h('label', { style: 'margin-top:8px' }, t('plan.repRange')));
+    configWrap.appendChild(h('div', { class: 'grid2' }, [
       h('div', {}, [h('label', { class: 'muted' }, t('plan.repMin')), repMin]),
       h('div', {}, [h('label', { class: 'muted' }, t('plan.repMax')), repMax]),
-    ]),
-    h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')),
-    h('div', { class: 'grid2', style: 'margin-top:8px' }, [
+    ]));
+    configWrap.appendChild(h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, t('plan.repRangeHint')));
+    configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.restSec')), rest]),
       h('div', {}),
-    ]),
-    h('button', {
+    ]));
+    configWrap.appendChild(h('button', {
       class: 'btn btn-sm', style: 'margin-top:12px',
-      onClick: async () => {
-        if (!picker.value) { toast(t('plan.pickOne')); return; }
-        const existing = await app.repo.listPlanExercises(day.id);
-        // Rango normalizado (min>=1, max>=min). targetReps = centro del rango,
-        // que sigue alimentando autorrelleno y objetivo sin historial.
-        const range = normalizeRepRange(repMin.value, repMax.value);
-        await app.repo.savePlanExercise({
-          planDayId: day.id, exerciseId: picker.value, order: existing.length + 1,
-          targetSets: parseInt(sets.value) || settings.defaultSets,
-          repMin: range.min,
-          repMax: range.max,
-          targetReps: Math.round((range.min + range.max) / 2),
-          targetWeight: parseFloat(weight.value) || 0,
-          restSeconds: parseInt(rest.value) || settings.defaultRestSeconds,
-        });
-        picker.value = '';
-        paintExercises();
-      }
-    }, t('plan.addToDay')),
+      onClick: addSelected,
+    }, t('plan.addToDay')));
+  }
+
+  function paintPicker() {
+    clear(pickList);
+    // Si hay ejercicio elegido, no mostramos la lista (ya está en configuración).
+    if (pick.exerciseId) return;
+    const filtered = allExercises
+      .filter((e) => (!pick.muscle || e.muscleGroup === pick.muscle) && (!pick.q || e.name.toLowerCase().includes(pick.q)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (filtered.length === 0) {
+      pickList.appendChild(h('div', { class: 'empty' }, t('plan.noMatches')));
+      return;
+    }
+    for (const e of filtered) {
+      pickList.appendChild(h('div', {
+        class: 'card row picker-item', style: 'cursor:pointer',
+        onClick: () => { pick.exerciseId = e.id; renderConfig(); paintPicker(); },
+      }, [
+        h('div', { class: 'ex-icon', html: icon(e.icon) }),
+        h('div', { style: 'flex:1' }, [
+          h('div', { style: 'font-weight:700' }, e.name),
+          h('div', { class: 'row', style: 'gap:6px;margin-top:4px' }, [
+            h('span', { class: 'chip' }, e.muscleGroup),
+            h('span', { class: 'chip' }, e.equipment),
+          ]),
+        ]),
+      ]));
+    }
+  }
+
+  async function addSelected() {
+    if (!pick.exerciseId) { toast(t('plan.pickOne')); return; }
+    const existing = await app.repo.listPlanExercises(day.id);
+    // Rango normalizado (min>=1, max>=min). targetReps = centro del rango,
+    // que sigue alimentando autorrelleno y objetivo sin historial.
+    const range = normalizeRepRange(repMin.value, repMax.value);
+    await app.repo.savePlanExercise({
+      planDayId: day.id, exerciseId: pick.exerciseId, order: existing.length + 1,
+      targetSets: parseInt(sets.value) || settings.defaultSets,
+      repMin: range.min,
+      repMax: range.max,
+      targetReps: Math.round((range.min + range.max) / 2),
+      targetWeight: parseFloat(weight.value) || 0,
+      restSeconds: parseInt(rest.value) || settings.defaultRestSeconds,
+    });
+    // Reset del selector para poder añadir otro, restaurando valores por defecto.
+    pick.exerciseId = '';
+    sets.value = String(settings.defaultSets);
+    repMin.value = '8'; repMax.value = '12';
+    weight.value = '20'; rest.value = String(settings.defaultRestSeconds);
+    renderConfig();
+    paintPicker();
+    paintExercises();
+  }
+
+  search.addEventListener('input', () => { pick.q = search.value.toLowerCase(); paintPicker(); });
+  muscleSel.addEventListener('change', () => { pick.muscle = muscleSel.value; paintPicker(); });
+
+  screen.appendChild(h('div', { class: 'card' }, [
+    h('label', {}, t('plan.addExercise')),
+    search,
+    h('div', { style: 'margin-top:8px' }, muscleSel),
+    pickList,
+    configWrap,
   ]));
+  paintPicker();
+  renderConfig();
 
   const back = () => { popLayer(); renderPlan(root, app, { scrollToDayId: day.id }); };
   screen.appendChild(h('button', { class: 'btn', style: 'margin-top:8px', onClick: back }, t('common.done')));
