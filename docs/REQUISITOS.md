@@ -61,6 +61,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-37 | 2 | **Repetir última serie**: botón para copiar el peso×reps de la última serie confirmada a otra serie. |
 | RF-38 | 2 | **Volumen semanal por grupo muscular**: nº de series por músculo en la semana en curso (métrica clave de hipertrofia). |
 | RF-39 | 2 | **Nota de sesión**: campo de texto libre por sesión (sensaciones, molestias…). |
+| RF-39b | 2 | **Nota por ejercicio** dentro de la sesión (B8): cada ejercicio tiene su propio campo de texto libre (técnica, molestias puntuales…), guardado en `session.exerciseNotes[exerciseId]`. Independiente de la nota global. |
 
 ### Motivación y notificaciones
 

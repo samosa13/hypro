@@ -174,6 +174,21 @@ async function exerciseCard(app, ctx, pe, ex) {
     setsWrap.appendChild(setRow(app, ctx, pe, ex, i, { prefillWeight, prefillReps, lastEntered }));
   }
   card.appendChild(setsWrap);
+
+  // Nota por ejercicio dentro de la sesión (B8): texto libre, se guarda al salir del campo.
+  const exNote = h('input', {
+    type: 'text', class: 'ex-note',
+    placeholder: t('train.exerciseNote'),
+    value: ctx.session.exerciseNotes?.[ex.id] ?? '',
+  });
+  exNote.addEventListener('change', async () => {
+    await app.setExerciseNote(ctx.session.id, ex.id, exNote.value);
+    // Mantener el objeto de sesión en memoria coherente con lo guardado.
+    ctx.session.exerciseNotes = { ...(ctx.session.exerciseNotes ?? {}) };
+    if (exNote.value.trim()) ctx.session.exerciseNotes[ex.id] = exNote.value.trim();
+    else delete ctx.session.exerciseNotes[ex.id];
+  });
+  card.appendChild(exNote);
   return card;
 }
 

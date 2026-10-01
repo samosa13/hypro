@@ -309,6 +309,9 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 /* Gráfica de línea (historial por ejercicio A2) */
 .line-chart { display: block; width: 100%; height: auto; }
 
+/* Nota por ejercicio dentro de la sesión (B8) */
+.ex-note { margin-top: 10px; font-size: 13px; }
+
 /* Selector rico de ejercicios al editar el día (A4) */
 .picker-list { max-height: 46vh; overflow-y: auto; margin-top: 10px; }
 .picker-item { margin: 8px 0; }

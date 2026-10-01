@@ -196,6 +196,21 @@ export const repository = {
     await db.sessions.update(sessionId, { note: note ?? '' });
   },
   /**
+   * Guarda/actualiza la nota de un EJERCICIO concreto dentro de la sesión (B8).
+   * Las notas por ejercicio viven en un mapa `exerciseNotes` de la sesión
+   * ({ [exerciseId]: texto }), campo libre sin índice. Una nota vacía se elimina
+   * del mapa para no acumular basura.
+   */
+  async updateSessionExerciseNote(sessionId, exerciseId, note) {
+    const s = await db.sessions.get(sessionId);
+    if (!s) return;
+    const notes = { ...(s.exerciseNotes ?? {}) };
+    const text = (note ?? '').trim();
+    if (text) notes[exerciseId] = text;
+    else delete notes[exerciseId];
+    await db.sessions.update(sessionId, { exerciseNotes: notes });
+  },
+  /**
    * Elimina una sesión fantasma (sin series). Se usa al salir de Entrenar sin
    * haber registrado nada, para no dejar basura en la tabla.
    */

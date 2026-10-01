@@ -367,6 +367,38 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(stillCustom.isCustom).toBe(true);
   });
 
+  // --- B8: notas por ejercicio dentro de la sesión ---
+
+  it('setExerciseNote guarda por ejercicio sin pisar otras notas ni la global', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const exercises = await repository.listExercises(U);
+    const sentadilla = exercises.find((e) => e.name === 'Sentadilla con barra');
+
+    // Nota global de la sesión + notas por ejercicio.
+    await app.setSessionNote(s.id, 'Buen día de fuerza');
+    await app.setExerciseNote(s.id, press.id, 'Hombro molestó un poco');
+    await app.setExerciseNote(s.id, sentadilla.id, 'Profundidad perfecta');
+
+    let sess = await repository.getSession(s.id);
+    expect(sess.note).toBe('Buen día de fuerza');
+    expect(sess.exerciseNotes[press.id]).toBe('Hombro molestó un poco');
+    expect(sess.exerciseNotes[sentadilla.id]).toBe('Profundidad perfecta');
+
+    // Editar una no toca la otra ni la global.
+    await app.setExerciseNote(s.id, press.id, 'Mejor, sin molestia');
+    sess = await repository.getSession(s.id);
+    expect(sess.exerciseNotes[press.id]).toBe('Mejor, sin molestia');
+    expect(sess.exerciseNotes[sentadilla.id]).toBe('Profundidad perfecta');
+    expect(sess.note).toBe('Buen día de fuerza');
+
+    // Vaciar una nota la elimina del mapa.
+    await app.setExerciseNote(s.id, sentadilla.id, '   ');
+    sess = await repository.getSession(s.id);
+    expect(sess.exerciseNotes[sentadilla.id]).toBeUndefined();
+    expect(sess.exerciseNotes[press.id]).toBe('Mejor, sin molestia');
+  });
+
   it('bootstrap sobre BD ya sembrada añade los seeds nuevos del catálogo', async () => {
     // Primera instalación con catálogo completo.
     await app.bootstrap();

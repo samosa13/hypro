@@ -43,6 +43,7 @@ export default {
   'train.sessionSaved': '¡Sesión guardada! 💪',
   'train.emptyDiscarded': 'Sesión vacía descartada',
   'train.note': '📝 Nota de hoy (opcional: sensaciones, molestias…)',
+  'train.exerciseNote': '📝 Nota de este ejercicio (técnica, molestias…)',
   'train.noPR': 'Sin récord aún — ¡a por el primero!',
   'train.prLine': '🏆 PR: {reps} reps × {weight}kg ({date})',
   'train.lastTime': 'Última vez: {sets}',

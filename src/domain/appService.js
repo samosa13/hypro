@@ -480,6 +480,11 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       return repo.updateSessionNote(sessionId, note);
     },
 
+    /** Guarda la nota de un ejercicio concreto dentro de la sesión (B8). */
+    async setExerciseNote(sessionId, exerciseId, note) {
+      return repo.updateSessionExerciseNote(sessionId, exerciseId, note);
+    },
+
     /**
      * Estadísticas de descansos reales y duración de sesiones (RF-28, RF-34).
      * @returns {{avgRest:number, restSamples:number[], sessionDurations:Array}}
