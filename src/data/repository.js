@@ -542,6 +542,30 @@ export const repository = {
     );
     return { ok: true };
   },
+
+  /**
+   * Borra TODOS los datos del usuario (reseteo a estado inicial). Vacía las 9
+   * tablas en una transacción, incluidas `exercises`, `settings` y `backups`.
+   * NO resiembra el catálogo ni recrea los ajustes: de eso se encarga
+   * `appService.bootstrap()`, que debe llamarse justo después para dejar la app
+   * como recién instalada (catálogo semilla + ajustes por defecto).
+   *
+   * Operación DESTRUCTIVA e irreversible: la UI debe exigir doble confirmación
+   * y ofrecer exportar una copia antes.
+   */
+  async wipeAll() {
+    await db.transaction(
+      'rw',
+      [db.exercises, db.plans, db.planDays, db.planExercises, db.sessions, db.loggedSets, db.personalRecords, db.settings, db.backups],
+      async () => {
+        await Promise.all([
+          db.exercises.clear(), db.plans.clear(), db.planDays.clear(), db.planExercises.clear(),
+          db.sessions.clear(), db.loggedSets.clear(), db.personalRecords.clear(),
+          db.settings.clear(), db.backups.clear(),
+        ]);
+      }
+    );
+  },
 };
 
 export default repository;

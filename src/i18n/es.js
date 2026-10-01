@@ -232,6 +232,14 @@ export default {
   'settings.exported': 'Copia exportada',
   'settings.restored': 'Datos restaurados',
   'settings.invalidFile': 'Fichero no válido',
+  // Zona de peligro: reseteo (punto 3)
+  'settings.dangerZone': 'Zona de peligro',
+  'settings.resetHint': 'Borra TODOS tus datos (planes, entrenamientos y récords) y deja la app como recién instalada, con el catálogo de ejercicios de fábrica. No se puede deshacer.',
+  'settings.reset': '🗑 Resetear app a valores iniciales',
+  'settings.resetConfirm': 'Esto BORRA de forma permanente todos tus planes, entrenamientos y récords. Si quieres conservarlos, cancela y pulsa antes "Exportar copia". ¿Seguro que quieres resetear la app?',
+  'settings.resetConfirmBtn': 'Sí, borrar todo',
+  'settings.resetCancel': 'Cancelar',
+  'settings.resetDone': 'App reseteada. Empieza de cero 💪',
   'settings.footer': '{app} v{version} · datos locales en tu dispositivo',
   'settings.iconsCredit': 'Iconos: game-icons.github.io (CC BY 3.0), Tabler (MIT), Material Design Icons, Phosphor.',
 

@@ -2,7 +2,7 @@
  * UI · Pantalla "Ajustes" — descanso, sonido, entreno nocturno, backup export/import.
  * RF-25, RF-40, RF-50, RF-51.
  */
-import { h, clear, toast } from '../dom.js';
+import { h, clear, toast, confirmDialog } from '../dom.js';
 import { APP } from '../../config/app.config.js';
 import { t, setLocale, getLocale } from '../../i18n/index.js';
 
@@ -102,6 +102,13 @@ export async function renderSettings(root, app) {
     })(),
   ]));
 
+  // --- Zona de peligro: reseteo a estado inicial ---
+  screen.appendChild(h('div', { style: 'font-weight:800;margin:14px 4px 8px;color:var(--color-danger,#ff453a)' }, t('settings.dangerZone')));
+  screen.appendChild(h('div', { class: 'card' }, [
+    h('div', { class: 'muted', style: 'margin-bottom:12px' }, t('settings.resetHint')),
+    h('button', { class: 'btn btn-danger btn-sm', onClick: resetApp }, t('settings.reset')),
+  ]));
+
   screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:20px' }, t('settings.footer', { app: APP.name, version: APP.version })));
   // Atribución de iconos (requisito de la licencia CC BY 3.0 de game-icons).
   screen.appendChild(h('div', { class: 'faint', style: 'text-align:center;margin-top:6px;font-size:11px' }, t('settings.iconsCredit')));
@@ -120,6 +127,22 @@ export async function renderSettings(root, app) {
     await app.repo.saveSettings({ ...s, lastExportAt: new Date().toISOString() }, app.userId);
     toast(t('settings.exported'));
     renderSettings(root, app); // re-render para ocultar el aviso de backup
+  }
+
+  async function resetApp() {
+    // Confirmación destructiva única. El texto recuerda exportar antes (el botón
+    // de exportar está justo encima, en esta misma pantalla). Se evita encadenar
+    // dos diálogos porque popLayer() usa history.back() asíncrono y el segundo
+    // diálogo se cerraría solo al procesarse el popstate pendiente del primero.
+    const ok = await confirmDialog(t('settings.resetConfirm'), {
+      confirmText: t('settings.resetConfirmBtn'),
+      cancelText: t('settings.resetCancel'),
+      danger: true,
+    });
+    if (!ok) return;
+    await app.resetToInitial();
+    toast(t('settings.resetDone'));
+    renderSettings(root, app);
   }
 
   async function importData(fileInput) {

@@ -198,6 +198,20 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
     },
 
     /**
+     * Resetea la app a su estado inicial (como recién instalada): borra TODOS
+     * los datos del usuario y vuelve a sembrar el catálogo de ejercicios y los
+     * ajustes por defecto. Operación DESTRUCTIVA; la UI exige doble confirmación
+     * y ofrece exportar una copia antes.
+     *
+     * Reutiliza `wipeAll` (borrado transaccional) + `bootstrap` (resiembra el
+     * catálogo si la tabla queda vacía y recrea los ajustes por defecto).
+     */
+    async resetToInitial() {
+      await repo.wipeAll();
+      await this.bootstrap();
+    },
+
+    /**
      * Registra una serie y evalúa PR (RF-21, RF-26, RF-27).
      * @returns {{set:object, isPR:boolean, pr:object|null}}
      */

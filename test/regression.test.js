@@ -707,6 +707,51 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect((await repository.getExercise(press.id)).tracking).toBe('weight_reps');   // default
   });
 
+  // --- Reseteo de la app a valores iniciales (punto 3) ---
+
+  it('resetToInitial borra datos del usuario y resiembra el catálogo', async () => {
+    // Montar un estado con plan, sesión, serie y PR.
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 60, reps: 5 });
+    await repository.finishSession(s.id);
+    // Un ejercicio propio del usuario.
+    await repository.addExercise({ name: 'Mi ejercicio', muscleGroup: 'core', equipment: 'peso corporal', icon: 'bodyweight' }, U);
+    // Cambiar un ajuste para comprobar que vuelve al valor por defecto.
+    await repository.saveSettings({ ...(await repository.getSettings(U)), weeklyVolumeTarget: 99 }, U);
+
+    expect(await repository.countAllSessions(U)).toBe(1);
+    expect(await repository.countPRs(U)).toBeGreaterThan(0);
+
+    await app.resetToInitial();
+
+    const { SEED_EXERCISES } = await import('../src/data/seedExercises.js');
+    // Catálogo resembrado exactamente (sin el ejercicio propio).
+    expect(await repository.countExercises(U)).toBe(SEED_EXERCISES.length);
+    expect((await repository.listExercises(U)).find((e) => e.name === 'Mi ejercicio')).toBeUndefined();
+    // Datos del usuario vaciados.
+    expect(await repository.countAllSessions(U)).toBe(0);
+    expect(await repository.countAllSets(U)).toBe(0);
+    expect(await repository.countPRs(U)).toBe(0);
+    expect(await repository.listPlans(U)).toEqual([]);
+    // Ajustes vueltos al valor por defecto.
+    const settings = await repository.getSettings(U);
+    expect(settings.weeklyVolumeTarget).toBe(12);
+  });
+
+  it('wipeAll deja todas las tablas vacías (sin resembrar)', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10 });
+    await repository.finishSession(s.id);
+
+    await repository.wipeAll();
+
+    expect(await repository.countExercises(U)).toBe(0); // wipeAll NO resiembra
+    expect(await repository.listPlans(U)).toEqual([]);
+    expect(await repository.countAllSessions(U)).toBe(0);
+  });
+
   // --- D17: superseries / triseries / circuitos ---
 
   /** Monta un día con 3 ejercicios conocidos y devuelve {day, pes}. */
