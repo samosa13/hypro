@@ -61,6 +61,7 @@ export default {
   'train.setUpdated': 'Serie actualizada',
   'train.saveSet': 'Guardar',
   'train.warmup': 'Calentamiento (no cuenta para récord ni volumen)',
+  'train.rirHint': 'RIR: repeticiones en reserva (0 = al fallo). Opcional.',
 
   // --- Plan ---
   'plan.title': 'Mi plan',

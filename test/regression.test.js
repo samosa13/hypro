@@ -442,6 +442,32 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(await repository.getPR(press.id, U)).toBe(null);
   });
 
+  // --- B10: RIR (reps en reserva) opcional por serie ---
+
+  it('logSet persiste el RIR cuando se indica, y null cuando no', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const withRir = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 40, reps: 10, rir: 2 });
+    const noRir = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 2, weight: 40, reps: 9 });
+    expect(withRir.set.rir).toBe(2);
+    expect(noRir.set.rir).toBe(null);
+  });
+
+  it('el RIR no afecta al PR y se puede editar', async () => {
+    const { plan, press, days } = await setupPlan(1);
+    const s = await app.startSession(plan, days[0]);
+    const r1 = await app.logSet({ sessionId: s.id, exercise: press, setNumber: 1, weight: 50, reps: 8, rir: 3 });
+    const prBefore = await repository.getPR(press.id, U);
+    expect(prBefore.bestWeight).toBe(50);
+
+    // Editar solo el RIR no cambia el récord.
+    const { set, pr } = await app.editSet(r1.set.id, { rir: 1 });
+    expect(set.rir).toBe(1);
+    expect(pr.bestWeight).toBe(50);
+    expect(set.weight).toBe(50); // peso/reps intactos
+    expect(set.reps).toBe(8);
+  });
+
   // --- B8: notas por ejercicio dentro de la sesión ---
 
   it('setExerciseNote guarda por ejercicio sin pisar otras notas ni la global', async () => {

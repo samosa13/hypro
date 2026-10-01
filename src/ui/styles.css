@@ -312,6 +312,10 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 /* Nota por ejercicio dentro de la sesión (B8) */
 .ex-note { margin-top: 10px; font-size: 13px; }
 
+/* Campo RIR por serie (B10) */
+.rir-input { text-align: center; }
+.rir-input::placeholder { font-size: 11px; letter-spacing: .5px; }
+
 /* Serie de calentamiento (B9) */
 .warm-toggle { opacity: .45; filter: grayscale(1); }
 .warm-toggle.active { opacity: 1; filter: none; }

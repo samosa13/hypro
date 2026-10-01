@@ -196,6 +196,8 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const { prefillWeight, prefillReps, lastEntered } = opts;
   const weight = h('input', { type: 'number', min: '0', step: '0.5', value: String(prefillWeight ?? 0), style: 'width:80px' });
   const reps = h('input', { type: 'number', min: '0', value: String(prefillReps ?? 0), style: 'width:70px' });
+  // RIR opcional (B10): reps en reserva (0 = al fallo). Vacío = sin dato.
+  const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', title: t('train.rirHint'), class: 'rir-input', style: 'width:58px' });
   const row = h('div', { class: 'set-row' });
 
   // Id de la serie una vez persistida (A1): habilita editar/borrar.
@@ -218,6 +220,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, 'kg'));
   row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+  row.appendChild(rir);
   row.appendChild(warmBtn);
   row.appendChild(repeatBtn);
   row.appendChild(doneBtn);
@@ -243,7 +246,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   /** Pasa la fila a modo "confirmada": inputs bloqueados, botones editar/borrar. */
   function toConfirmedUI() {
     row.classList.add('done');
-    weight.disabled = true; reps.disabled = true;
+    weight.disabled = true; reps.disabled = true; rir.disabled = true;
     doneBtn.style.display = 'none';
     repeatBtn.style.display = 'none';
     warmBtn.style.display = 'none';
@@ -253,17 +256,26 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   /** Pasa la fila a modo "edición": inputs activos, botón guardar visible. */
   function toEditingUI() {
     row.classList.remove('done');
-    weight.disabled = false; reps.disabled = false;
+    weight.disabled = false; reps.disabled = false; rir.disabled = false;
     doneBtn.style.display = '';
     warmBtn.style.display = '';
     editBtn.style.display = 'none';
     delBtn.style.display = 'none';
   }
 
+  /** RIR del input: entero 0..10 o null si está vacío/ inválido. */
+  function parseRir() {
+    const v = rir.value.trim();
+    if (v === '') return null;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : null;
+  }
+
   async function confirm() {
     const w = parseFloat(weight.value) || 0;
     const r = parseInt(reps.value) || 0;
     if (w <= 0 || r <= 0) { toast(t('train.needWeightReps')); return; }
+    const rirVal = parseRir();
 
     // Recordar lo confirmado para el botón "repetir" de la siguiente serie (#3).
     lastEntered.weight = w;
@@ -271,7 +283,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
 
     if (setId) {
       // Edición de una serie ya registrada (A1): no crea serie nueva ni timer.
-      const { pr, isPR } = await app.editSet(setId, { weight: w, reps: r });
+      const { pr, isPR } = await app.editSet(setId, { weight: w, reps: r, rir: rirVal });
       row.classList.toggle('pr', isThisThePR(pr, w, r));
       toConfirmedUI();
       // Si al corregir se bate récord, se celebra igual que al registrar (#3).
@@ -283,7 +295,7 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
     // El descanso real lo calcula appService desde el loggedAt de la última
     // serie persistida (peer review #10): medida estable, sin estado en la vista.
     const { isPR, set } = await app.logSet({
-      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r, isWarmup,
+      sessionId: ctx.session.id, exercise: ex, setNumber, weight: w, reps: r, isWarmup, rir: rirVal,
     });
     setId = set.id;
 

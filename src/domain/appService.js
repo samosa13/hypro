@@ -147,7 +147,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * Registra una serie y evalúa PR (RF-21, RF-26, RF-27).
      * @returns {{set:object, isPR:boolean, pr:object|null}}
      */
-    async logSet({ sessionId, exercise, setNumber, weight, reps, restTakenSeconds = null, isWarmup = false }) {
+    async logSet({ sessionId, exercise, setNumber, weight, reps, restTakenSeconds = null, isWarmup = false, rir = null }) {
       const currentPR = await repo.getPR(exercise.id, userId);
       const setForCheck = { weight, reps };
       // Las series de calentamiento (B9) NO compiten por el récord: no cuentan
@@ -175,6 +175,9 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         reps,
         restTakenSeconds: realRest,
         isWarmup: !!isWarmup,
+        // RIR (reps en reserva) opcional (B10): metadato de esfuerzo percibido.
+        // No afecta PR ni volumen; null si el usuario no lo indica.
+        rir: Number.isFinite(rir) ? rir : null,
         isPR: newPR,
       });
 
@@ -214,7 +217,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
      * existiendo una serie.
      * @returns {Promise<{set:object, pr:object|null}>}
      */
-    async editSet(setId, { weight, reps, isWarmup } = {}) {
+    async editSet(setId, { weight, reps, isWarmup, rir } = {}) {
       const existing = await repo.getSet(setId);
       if (!existing) return { set: null, pr: null, isPR: false };
       // 1RM del récord ANTES de editar, para saber si la edición bate PR.
@@ -225,6 +228,7 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       if (weight != null) patch.weight = weight;
       if (reps != null) patch.reps = reps;
       if (isWarmup != null) patch.isWarmup = !!isWarmup; // marcar/desmarcar calentamiento (B9)
+      if (rir !== undefined) patch.rir = Number.isFinite(rir) ? rir : null; // RIR opcional (B10)
       const set = await repo.updateLoggedSet(setId, patch);
       const pr = await this.recomputePR(existing.exerciseId);
       // El flag isPR de cada serie se mantiene coherente con el PR recomputado.
