@@ -26,7 +26,7 @@ function render(dataKey) {
  * disponible en los sets libres.
  */
 const EXERCISE_ICON = {
-  // Pecho — press = levantamiento; aperturas/máquina = equipo
+  // Pecho — press = empuje; aperturas = mancuerna; máquina/polea por equipo
   ex_press_banca_barra: 'weightlift_up',
   ex_press_banca_db: 'dumbbell',
   ex_incline_barra: 'weightlift_up',
@@ -37,26 +37,26 @@ const EXERCISE_ICON = {
   ex_fondos_paralelas: 'bodyweight',
   ex_press_maquina: 'machine',
 
-  // Espalda — tirón / peso muerto
-  ex_dominadas: 'bodyweight',
-  ex_jalon: 'cable',
+  // Espalda — tirón (dominada/jalón) / remo / peso muerto / lumbar
+  ex_dominadas: 'acrobatic',          // cuerpo colgado, gesto de dominada
+  ex_jalon: 'pull',                   // tirón vertical en polea
   ex_remo_barra: 'barbell',
   ex_remo_db: 'dumbbell',
   ex_remo_maquina: 'machine',
-  ex_remo_polea: 'cable',
-  ex_peso_muerto: 'weightlift_down',
+  ex_remo_polea: 'pull',              // tirón horizontal
+  ex_peso_muerto: 'weightlift_down',  // levantamiento desde el suelo
   ex_pullover: 'dumbbell',
 
-  // Hombro
+  // Hombro — press arriba / elevaciones con brazos / equipo
   ex_press_militar: 'weightlift_up',
-  ex_press_hombro_db: 'dumbbell',
-  ex_elev_lateral: 'dumbbell',
-  ex_elev_frontal: 'dumbbell',
-  ex_pajaros: 'dumbbell',
+  ex_press_hombro_db: 'handsup',      // brazos arriba
+  ex_elev_lateral: 'handsup',
+  ex_elev_frontal: 'handsup',
+  ex_pajaros: 'handsup',
   ex_press_hombro_maquina: 'machine',
-  ex_face_pull: 'cable',
+  ex_face_pull: 'pull',
 
-  // Bíceps
+  // Bíceps — brazo flexionado; polea/máquina por equipo
   ex_curl_barra: 'biceps',
   ex_curl_db: 'biceps',
   ex_curl_martillo: 'biceps',
@@ -64,27 +64,27 @@ const EXERCISE_ICON = {
   ex_curl_concentrado: 'biceps',
   ex_curl_predicador: 'machine',
 
-  // Tríceps
+  // Tríceps — polea/barra/mancuerna/fondos por equipo-gesto
   ex_tri_polea: 'cable',
   ex_press_frances: 'barbell',
   ex_tri_db: 'dumbbell',
   ex_fondos_banco: 'bodyweight',
   ex_patada_tri: 'dumbbell',
 
-  // Pierna
+  // Pierna — sentadilla/pierna, zancadas de rodilla, bisagra, glúteo
   ex_sentadilla: 'leg',
   ex_prensa: 'machine',
   ex_ext_cuadriceps: 'machine',
   ex_curl_femoral: 'machine',
-  ex_zancadas: 'leg',
-  ex_bulgara: 'leg',
+  ex_zancadas: 'kick',                // zancada / paso adelante
+  ex_bulgara: 'kneeling',             // apoyo en banco, rodilla atrás
   ex_peso_muerto_rumano: 'weightlift_down',
   ex_gemelos: 'leg',
-  ex_hip_thrust: 'leg',
-  ex_patada_gluteo: 'cable',
+  ex_hip_thrust: 'kick',              // empuje de cadera / glúteo
+  ex_patada_gluteo: 'kick',
 
-  // Core
-  ex_plancha: 'abdominal',
+  // Core — abdominales; plancha isométrica; crunch en polea
+  ex_plancha: 'stretch',              // isométrico / posición mantenida
   ex_crunch: 'abdominal',
   ex_elev_piernas: 'abdominal',
   ex_rueda_ab: 'abdominal',

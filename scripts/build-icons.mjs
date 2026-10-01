@@ -46,19 +46,27 @@ function getIcon(token) {
  */
 const MAP = {
   // Fuerza / cuerpo (game-icons, CC BY 3.0)
-  weightlift_up: 'game-icons:weight-lifting-up',
-  weightlift_down: 'game-icons:weight-lifting-down',
+  weightlift_up: 'game-icons:weight-lifting-up',   // press / empuje vertical
+  weightlift_down: 'game-icons:weight-lifting-down', // peso muerto / bisagra
   muscle_up: 'game-icons:muscle-up',
-  biceps: 'game-icons:biceps',
-  leg: 'game-icons:leg',
-  abdominal: 'game-icons:abdominal-armor',
+  biceps: 'mdi:arm-flex',                          // brazo flexionado (más claro que game-icons:biceps)
+  leg: 'game-icons:leg',                           // pierna / sentadilla
+  abdominal: 'game-icons:abdominal-armor',         // core / abdominales
   gymbag: 'game-icons:gym-bag',
+  acrobatic: 'game-icons:acrobatic',               // dominadas / peso corporal colgado
+  kick: 'game-icons:high-kick',                    // zancadas / patadas / glúteo
+  kneeling: 'game-icons:kneeling',                 // sentadilla búlgara / zancada
+  backpain: 'game-icons:back-pain',                // espalda baja / lumbar
+  // Movimiento / cuerpo (sets MIT/Apache)
+  handsup: 'mdi:human-handsup',                    // elevaciones de hombro / press hombro
+  stretch: 'tabler:stretching',                    // plancha / core isométrico
   // Equipo (sets MIT/Apache)
   barbell: 'tabler:barbell-filled',
   dumbbell: 'mdi:dumbbell',
   kettlebell: 'mdi:kettlebell',
   machine: 'mdi:weight-lifter',
-  cable: 'game-icons:pull',
+  cable: 'game-icons:pulley-hook',                 // polea (gancho de polea, más literal que :pull)
+  pull: 'game-icons:pull',                         // tirón (jalón / dominada asistida)
   bodyweight: 'game-icons:body-balance',
   run: 'ph:person-simple-run-fill',
 };
