@@ -71,6 +71,35 @@ export const repository = {
       await db.planDays.delete(dayId);
     });
   },
+  /**
+   * Duplica un día del plan: crea un día nuevo al final (order = max+1) con el
+   * nombre indicado (o el del origen + sufijo) y CLONA todos sus planExercises
+   * con ids nuevos (no comparte referencias; editar la copia no toca el origen).
+   * Transaccional. Devuelve el día creado.
+   * @param {string} dayId  día a duplicar
+   * @param {string} [newName]  nombre para la copia (si se omite, se usa el del origen)
+   * @returns {Promise<object|null>} el nuevo planDay, o null si el origen no existe
+   */
+  async duplicatePlanDay(dayId, newName) {
+    let created = null;
+    await db.transaction('rw', db.planDays, db.planExercises, async () => {
+      const src = await db.planDays.get(dayId);
+      if (!src) return;
+      const siblings = await db.planDays.where('planId').equals(src.planId).toArray();
+      const maxOrder = siblings.reduce((m, d) => Math.max(m, d.order ?? 0), 0);
+      const newDay = { id: uid(), planId: src.planId, name: newName ?? src.name, order: maxOrder + 1 };
+      await db.planDays.put(newDay);
+      const exs = (await db.planExercises.where('planDayId').equals(dayId).toArray())
+        .sort((a, b) => a.order - b.order);
+      for (const pe of exs) {
+        // Clona todos los campos salvo id/planDayId (nuevos). Spread primero para
+        // arrastrar campos futuros (repMin/repMax, etc.) sin tener que listarlos.
+        await db.planExercises.put({ ...pe, id: uid(), planDayId: newDay.id });
+      }
+      created = newDay;
+    });
+    return created;
+  },
 
   // ---------- Ejercicios de un día ----------
   async listPlanExercises(planDayId) {

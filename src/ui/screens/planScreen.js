@@ -48,7 +48,17 @@ export async function renderPlan(root, app, opts = {}) {
     const cardEl = h('div', { class: 'card' }, [
       h('div', { class: 'row-between' }, [
         h('div', { style: 'font-weight:800' }, t('plan.dayLabel', { order: day.order, name: day.name })),
-        h('button', { class: 'btn btn-ghost btn-sm', onClick: () => openEditDay(root, app, plan, day) }, t('common.edit')),
+        h('div', { class: 'row', style: 'gap:4px' }, [
+          h('button', { class: 'btn btn-ghost btn-sm', onClick: () => openEditDay(root, app, plan, day) }, t('common.edit')),
+          h('button', {
+            class: 'btn btn-ghost btn-sm', title: t('plan.duplicate'),
+            onClick: async () => {
+              await app.repo.duplicatePlanDay(day.id, t('plan.copySuffix', { name: day.name }));
+              toast(t('plan.dayDuplicated'));
+              renderPlan(root, app, { scrollToDayId: day.id });
+            }
+          }, t('plan.duplicate')),
+        ]),
       ]),
       h('div', { class: 'muted', style: 'margin-top:6px' },
         exs.length ? t('plan.nExercises', { n: exs.length }) : t('plan.noExercisesYet')),

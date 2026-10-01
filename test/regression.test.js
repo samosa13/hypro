@@ -296,4 +296,42 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     const changed = await repository.movePlanExercise(day.id, items[0].id, -1);
     expect(changed).toBe(false);
   });
+
+  // --- A6: duplicar un día del plan ---
+
+  it('duplicatePlanDay copia nombre y ejercicios con ids nuevos (sin compartir referencias)', async () => {
+    const { plan, days } = await setupPlan(1);
+    const srcDay = days[0];
+    const srcEx = await repository.listPlanExercises(srcDay.id);
+    expect(srcEx.length).toBe(1);
+
+    const copy = await repository.duplicatePlanDay(srcDay.id, 'Full Body (copia)');
+    expect(copy).toBeTruthy();
+    expect(copy.name).toBe('Full Body (copia)');
+    expect(copy.id).not.toBe(srcDay.id);
+
+    // El plan ahora tiene un día más, al final.
+    const allDays = await repository.listPlanDays(plan.id);
+    expect(allDays.length).toBe(2);
+    expect(allDays[1].id).toBe(copy.id);
+    expect(copy.order).toBe(2);
+
+    // Los ejercicios se clonaron con ids nuevos pero mismos valores.
+    const copyEx = await repository.listPlanExercises(copy.id);
+    expect(copyEx.length).toBe(1);
+    expect(copyEx[0].id).not.toBe(srcEx[0].id);
+    expect(copyEx[0].exerciseId).toBe(srcEx[0].exerciseId);
+    expect(copyEx[0].targetWeight).toBe(srcEx[0].targetWeight);
+
+    // Editar la copia NO altera el origen.
+    await repository.savePlanExercise({ ...copyEx[0], targetWeight: 999 });
+    const srcAfter = await repository.listPlanExercises(srcDay.id);
+    expect(srcAfter[0].targetWeight).toBe(srcEx[0].targetWeight);
+  });
+
+  it('duplicatePlanDay de un día inexistente devuelve null', async () => {
+    await setupPlan(1);
+    const copy = await repository.duplicatePlanDay('no-existe');
+    expect(copy).toBe(null);
+  });
 });

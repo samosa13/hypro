@@ -26,6 +26,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-12b | 2 | El selector de ejercicios al editar un día ofrece **búsqueda por nombre, filtro por grupo muscular e icono por ejercicio** (A4), en lugar de un desplegable plano. Al elegir uno se configuran series/rango de reps/peso/descanso en el sitio. |
 | RF-13 | 1 | Por cada ejercicio del día se configura: nº de series (por defecto 3, configurable), reps objetivo, peso objetivo y descanso. |
 | RF-14 | 1 | El usuario puede **modificar un día** (añadir/quitar/reordenar ejercicios, renombrar) en cualquier momento **sin perder el historial** ya registrado. |
+| RF-14b | 2 | El usuario puede **duplicar un día** del plan (A6): crea una copia al final con el nombre + "(copia)" y clona sus ejercicios con ids nuevos (editar la copia no afecta al original). |
 | RF-15 | 3 | El usuario puede tener **varios planes** y activar uno. |
 | RF-16 | 3 | La app puede incorporar **planes prediseñados** (PPL, Upper/Lower, full-body) distribuibles/vendibles. |
 
