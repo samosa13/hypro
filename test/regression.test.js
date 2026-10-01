@@ -334,4 +334,51 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     const copy = await repository.duplicatePlanDay('no-existe');
     expect(copy).toBe(null);
   });
+
+  // --- B7: siembra incremental de ejercicios semilla ---
+
+  it('reconcileSeedExercises inserta solo los seeds que faltan, sin duplicar ni tocar los propios', async () => {
+    await app.bootstrap(); // siembra el catálogo completo
+    const { SEED_EXERCISES } = await import('../src/data/seedExercises.js');
+    const fullCount = SEED_EXERCISES.length;
+    expect(await repository.countExercises(U)).toBe(fullCount);
+
+    // El usuario crea un ejercicio propio.
+    await repository.addExercise({ name: 'Mi ejercicio raro', muscleGroup: 'core', equipment: 'peso corporal', icon: 'bodyweight' }, U);
+    expect(await repository.countExercises(U)).toBe(fullCount + 1);
+
+    // Simulamos una instalación "antigua": borramos 2 seeds concretos.
+    const all = await repository.listExercises(U);
+    const toRemove = all.filter((e) => !e.isCustom).slice(0, 2);
+    for (const e of toRemove) await db.exercises.delete(e.id);
+    expect(await repository.countExercises(U)).toBe(fullCount - 1); // -2 seeds +1 propio
+
+    // La siembra incremental repone exactamente los 2 que faltan.
+    await app.reconcileSeedExercises();
+    expect(await repository.countExercises(U)).toBe(fullCount + 1);
+
+    // Idempotente: una segunda pasada no añade nada.
+    await app.reconcileSeedExercises();
+    expect(await repository.countExercises(U)).toBe(fullCount + 1);
+
+    // El ejercicio propio sigue intacto.
+    const stillCustom = (await repository.listExercises(U)).find((e) => e.name === 'Mi ejercicio raro');
+    expect(stillCustom).toBeTruthy();
+    expect(stillCustom.isCustom).toBe(true);
+  });
+
+  it('bootstrap sobre BD ya sembrada añade los seeds nuevos del catálogo', async () => {
+    // Primera instalación con catálogo completo.
+    await app.bootstrap();
+    const { SEED_EXERCISES } = await import('../src/data/seedExercises.js');
+    // Simulamos que esta BD se sembró con un catálogo más viejo: quitamos uno.
+    const all = await repository.listExercises(U);
+    const victim = all.find((e) => !e.isCustom);
+    await db.exercises.delete(victim.id);
+    expect(await repository.countExercises(U)).toBe(SEED_EXERCISES.length - 1);
+
+    // Reabrir la app (bootstrap de nuevo, rama else) repone el que falta.
+    await app.bootstrap();
+    expect(await repository.countExercises(U)).toBe(SEED_EXERCISES.length);
+  });
 });

@@ -79,6 +79,53 @@ export const SEED_EXERCISES = [
 
   // ---- Antebrazo ----
   { name: 'Curl de muñeca', muscleGroup: 'antebrazo', equipment: 'barra', icon: 'ex_curl_muneca' },
+  { name: 'Curl de muñeca invertido', muscleGroup: 'antebrazo', equipment: 'barra', icon: 'ex_curl_muneca_inv' },
+
+  // ========================================================================
+  // Clásicos añadidos (B7). Grupos/equipos limitados a los existentes;
+  // trapecio y lumbar se encuadran en espalda.
+  // ========================================================================
+
+  // ---- Pecho ----
+  { name: 'Press declinado con barra', muscleGroup: 'pecho', equipment: 'barra', icon: 'ex_press_declinado' },
+  { name: 'Flexiones', muscleGroup: 'pecho', equipment: 'peso corporal', icon: 'ex_flexiones' },
+
+  // ---- Espalda ----
+  { name: 'Remo Pendlay', muscleGroup: 'espalda', equipment: 'barra', icon: 'ex_remo_pendlay' },
+  { name: 'Remo en punta (T-bar)', muscleGroup: 'espalda', equipment: 'barra', icon: 'ex_remo_tbar' },
+  { name: 'Jalón agarre neutro', muscleGroup: 'espalda', equipment: 'polea', icon: 'ex_jalon_neutro' },
+  { name: 'Pullover en polea', muscleGroup: 'espalda', equipment: 'polea', icon: 'ex_pullover_polea' },
+  { name: 'Encogimientos con barra (trapecio)', muscleGroup: 'espalda', equipment: 'barra', icon: 'ex_shrugs_barra' },
+  { name: 'Encogimientos con mancuernas (trapecio)', muscleGroup: 'espalda', equipment: 'mancuerna', icon: 'ex_shrugs_db' },
+  { name: 'Hiperextensiones lumbares', muscleGroup: 'espalda', equipment: 'peso corporal', icon: 'ex_hiperextension' },
+
+  // ---- Hombro ----
+  { name: 'Press Arnold', muscleGroup: 'hombro', equipment: 'mancuerna', icon: 'ex_press_arnold' },
+  { name: 'Remo al mentón', muscleGroup: 'hombro', equipment: 'barra', icon: 'ex_remo_menton' },
+
+  // ---- Tríceps ----
+  { name: 'Fondos en máquina asistida', muscleGroup: 'triceps', equipment: 'maquina', icon: 'ex_fondos_maquina' },
+  { name: 'Extensión de tríceps sobre la cabeza', muscleGroup: 'triceps', equipment: 'mancuerna', icon: 'ex_tri_overhead' },
+
+  // ---- Bíceps ----
+  { name: 'Curl araña', muscleGroup: 'biceps', equipment: 'mancuerna', icon: 'ex_curl_arana' },
+  { name: 'Curl inclinado con mancuernas', muscleGroup: 'biceps', equipment: 'mancuerna', icon: 'ex_curl_inclinado' },
+
+  // ---- Pierna ----
+  { name: 'Sentadilla frontal', muscleGroup: 'pierna', equipment: 'barra', icon: 'ex_sentadilla_frontal' },
+  { name: 'Peso muerto sumo', muscleGroup: 'pierna', equipment: 'barra', icon: 'ex_peso_muerto_sumo' },
+  { name: 'Good morning', muscleGroup: 'pierna', equipment: 'barra', icon: 'ex_good_morning' },
+  { name: 'Gemelo sentado', muscleGroup: 'pierna', equipment: 'maquina', icon: 'ex_gemelo_sentado' },
+  { name: 'Hack squat', muscleGroup: 'pierna', equipment: 'maquina', icon: 'ex_hack_squat' },
+
+  // ---- Glúteo ----
+  { name: 'Hip thrust a una pierna', muscleGroup: 'gluteo', equipment: 'peso corporal', icon: 'ex_hip_thrust_1' },
+  { name: 'Abducción de cadera en máquina', muscleGroup: 'gluteo', equipment: 'maquina', icon: 'ex_abduccion' },
+
+  // ---- Core ----
+  { name: 'Russian twist', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_russian_twist' },
+  { name: 'Mountain climbers', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_mountain_climbers' },
+  { name: 'Plancha lateral', muscleGroup: 'core', equipment: 'peso corporal', icon: 'ex_plancha_lateral' },
 ];
 
 export const MUSCLE_GROUPS = ['pecho', 'espalda', 'hombro', 'biceps', 'triceps', 'pierna', 'gluteo', 'core', 'antebrazo'];

@@ -11,7 +11,8 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 
 | ID | Fase | Requisito |
 |----|------|-----------|
-| RF-01 | 1 | La app incluye un catálogo precargado de ejercicios de máquina, mancuerna, barra, polea y peso corporal. |
+| RF-01 | 1 | La app incluye un catálogo precargado de ejercicios (77 tras B7) de máquina, mancuerna, barra, polea y peso corporal. |
+| RF-01b | 2 | **Siembra incremental** (B7): cuando el catálogo crece, los ejercicios nuevos se añaden también a instalaciones ya existentes al arrancar (emparejando por `seedKey`), sin duplicar los que el usuario ya tiene ni tocar sus ejercicios propios. |
 | RF-02 | 1 | Cada ejercicio muestra un **icono** identificativo además del nombre. |
 | RF-03 | 1 | Los ejercicios se pueden filtrar por grupo muscular y por tipo de equipo, y buscar por nombre. |
 | RF-04 | 1 | El usuario puede **crear ejercicios propios** (nombre, grupo muscular, equipo, icono). |

@@ -92,6 +92,42 @@ const EXERCISE_ICON = {
 
   // Antebrazo
   ex_curl_muneca: 'barbell',
+  ex_curl_muneca_inv: 'barbell',
+
+  // --- Clásicos añadidos (B7) ---
+  // Pecho
+  ex_press_declinado: 'weightlift_up',
+  ex_flexiones: 'bodyweight',
+  // Espalda
+  ex_remo_pendlay: 'barbell',
+  ex_remo_tbar: 'barbell',
+  ex_jalon_neutro: 'pull',
+  ex_pullover_polea: 'cable',
+  ex_shrugs_barra: 'barbell',
+  ex_shrugs_db: 'dumbbell',
+  ex_hiperextension: 'backpain',
+  // Hombro
+  ex_press_arnold: 'handsup',
+  ex_remo_menton: 'barbell',
+  // Tríceps
+  ex_fondos_maquina: 'machine',
+  ex_tri_overhead: 'dumbbell',
+  // Bíceps
+  ex_curl_arana: 'biceps',
+  ex_curl_inclinado: 'biceps',
+  // Pierna
+  ex_sentadilla_frontal: 'leg',
+  ex_peso_muerto_sumo: 'weightlift_down',
+  ex_good_morning: 'backpain',
+  ex_gemelo_sentado: 'machine',
+  ex_hack_squat: 'machine',
+  // Glúteo
+  ex_hip_thrust_1: 'kick',
+  ex_abduccion: 'machine',
+  // Core
+  ex_russian_twist: 'abdominal',
+  ex_mountain_climbers: 'bodyweight',
+  ex_plancha_lateral: 'stretch',
 
   // Genéricos / nav
   bodyweight: 'bodyweight',

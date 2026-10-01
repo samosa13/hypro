@@ -43,6 +43,10 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         }));
         await repo.bulkAddExercises(seeded);
       } else {
+        // Siembra incremental (B7): añade los ejercicios semilla NUEVOS que aún
+        // no estén en la BD (empareja por seedKey). Así, cuando el catálogo
+        // crece, los usuarios ya instalados reciben los nuevos sin perder nada.
+        await this.reconcileSeedExercises();
         // Migración de iconos: si el catálogo cambió las claves de icono, se
         // reconcilian por nombre para los ejercicios semilla (no custom). Así el
         // usuario ve los pictogramas nuevos sin borrar sus datos.
@@ -60,6 +64,32 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
       if (Object.keys(patch).length) await repo.saveSettings({ ...settings, ...patch }, userId);
       await this.ensureDailyBackup();
       return repo.getSettings(userId);
+    },
+
+    /**
+     * Siembra incremental de ejercicios semilla (B7). Inserta los ejercicios de
+     * SEED_EXERCISES cuyo `seedKey` no exista todavía en la BD del usuario, sin
+     * duplicar los que ya están ni tocar los ejercicios propios (isCustom). Así
+     * ampliar el catálogo llega también a instalaciones existentes.
+     *
+     * El emparejamiento con lo existente se hace por `seedKey` y, como respaldo
+     * para instalaciones antiguas sin seedKey, también por nombre, para no
+     * reinsertar un ejercicio semilla que el usuario ya tiene.
+     */
+    async reconcileSeedExercises() {
+      const existing = await repo.listExercises(userId);
+      const haveSeedKeys = new Set(existing.map((e) => e.seedKey).filter(Boolean));
+      const haveNames = new Set(existing.map((e) => e.name));
+      const toAdd = [];
+      for (const seed of SEED_EXERCISES) {
+        const key = seedKeyOf(seed);
+        if (haveSeedKeys.has(key) || haveNames.has(seed.name)) continue; // ya está
+        toAdd.push({
+          id: uid(), userId, isCustom: false, createdAt: new Date().toISOString(),
+          seedKey: key, ...seed,
+        });
+      }
+      if (toAdd.length) await repo.bulkAddExercises(toAdd);
     },
 
     /**
