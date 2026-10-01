@@ -9,6 +9,7 @@ import { ICON_KEYS } from '../icons.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
 import { renderExerciseHistory } from './exerciseHistoryScreen.js';
+import { matchesSearch } from '../../domain/search.js';
 
 // Estado de filtros persistente a nivel de módulo (peer review navegación #6):
 // se conserva al volver de crear un ejercicio o cambiar de pestaña.
@@ -39,10 +40,17 @@ export async function renderExercises(root, app) {
 
   muscleSel.addEventListener('change', () => { state.muscle = muscleSel.value; paint(); });
   equipSel.addEventListener('change', () => { state.equipment = equipSel.value; paint(); });
-  search.addEventListener('input', () => { state.q = search.value.toLowerCase(); paint(); });
+  // Se guarda el texto crudo; la normalización (minúsculas + sin acentos) la
+  // hace matchesSearch al filtrar, para búsqueda multi-campo consistente.
+  search.addEventListener('input', () => { state.q = search.value; paint(); });
 
-  const filters = h('div', { class: 'card' }, [
+  // Barra de búsqueda visual con icono (estilo VendIX).
+  const searchBar = h('div', { class: 'search-bar' }, [
+    h('span', { class: 'search-icon' }, '🔍'),
     search,
+  ]);
+  const filters = h('div', { class: 'card' }, [
+    searchBar,
     h('div', { class: 'grid2', style: 'margin-top:10px' }, [muscleSel, equipSel]),
   ]);
 
@@ -60,7 +68,9 @@ export async function renderExercises(root, app) {
     const filtered = all.filter((e) =>
       (!state.muscle || e.muscleGroup === state.muscle) &&
       (!state.equipment || e.equipment === state.equipment) &&
-      (!state.q || e.name.toLowerCase().includes(state.q))
+      // Búsqueda multi-campo e insensible a acentos (estilo VendIX): el texto
+      // casa contra nombre, grupo muscular o equipo.
+      matchesSearch(state.q, [e.name, e.muscleGroup, e.equipment])
     );
     if (filtered.length === 0) {
       listWrap.appendChild(h('div', { class: 'empty' }, t('ex.none')));

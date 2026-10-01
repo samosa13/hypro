@@ -353,3 +353,14 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 /* En el editor del plan, cohesionar visualmente las cards de un mismo grupo. */
 .card.grouped { border-left: 3px solid var(--color-accent, #ff6a00); }
 .card.group-cont { margin-bottom: 2px; }
+
+/* ---------- Barra de búsqueda (estilo VendIX) ---------- */
+.search-bar { position: relative; }
+.search-bar .search-icon {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  font-size: 16px; pointer-events: none; opacity: .7;
+}
+.search-bar input[type="search"] {
+  width: 100%; padding: 12px 14px 12px 42px;
+  box-sizing: border-box;
+}

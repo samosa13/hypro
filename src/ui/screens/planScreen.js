@@ -10,6 +10,7 @@ import { deriveRepRange, normalizeRepRange } from '../../domain/progression.js';
 import { MUSCLE_GROUPS } from '../../data/seedExercises.js';
 import { kgToDisplay, displayToKg, unitLabel, formatDuration } from '../../domain/units.js';
 import { normalizeTracking } from '../../domain/personalRecord.js';
+import { matchesSearch } from '../../domain/search.js';
 
 /** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
 function repRangeLabel(pe) {
@@ -320,7 +321,8 @@ async function openEditDay(root, app, plan, day) {
     // Si hay ejercicio elegido, no mostramos la lista (ya está en configuración).
     if (pick.exerciseId) return;
     const filtered = allExercises
-      .filter((e) => (!pick.muscle || e.muscleGroup === pick.muscle) && (!pick.q || e.name.toLowerCase().includes(pick.q)))
+      // Búsqueda multi-campo e insensible a acentos (estilo VendIX).
+      .filter((e) => (!pick.muscle || e.muscleGroup === pick.muscle) && matchesSearch(pick.q, [e.name, e.muscleGroup, e.equipment]))
       .sort((a, b) => a.name.localeCompare(b.name));
     if (filtered.length === 0) {
       pickList.appendChild(h('div', { class: 'empty' }, t('plan.noMatches')));
@@ -380,12 +382,18 @@ async function openEditDay(root, app, plan, day) {
     paintExercises();
   }
 
-  search.addEventListener('input', () => { pick.q = search.value.toLowerCase(); paintPicker(); });
+  // Se guarda el texto crudo; matchesSearch normaliza al filtrar.
+  search.addEventListener('input', () => { pick.q = search.value; paintPicker(); });
   muscleSel.addEventListener('change', () => { pick.muscle = muscleSel.value; paintPicker(); });
 
+  // Barra de búsqueda visual con icono (estilo VendIX).
+  const searchBar = h('div', { class: 'search-bar' }, [
+    h('span', { class: 'search-icon' }, '🔍'),
+    search,
+  ]);
   screen.appendChild(h('div', { class: 'card' }, [
     h('label', {}, t('plan.addExercise')),
-    search,
+    searchBar,
     h('div', { style: 'margin-top:8px' }, muscleSel),
     pickList,
     configWrap,

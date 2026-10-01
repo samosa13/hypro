@@ -9,6 +9,7 @@ import { currentStreak, maxGapDays } from '../src/domain/streak.js';
 import { findPlateaus } from '../src/domain/plateau.js';
 import { suggestNext } from '../src/domain/progression.js';
 import { formatDuration } from '../src/domain/units.js';
+import { normalizeText, matchesSearch } from '../src/domain/search.js';
 
 describe('personalRecord · 1RM y PR', () => {
   it('UT-PR-06 · Epley: peso*(1+reps/30)', () => {
@@ -136,6 +137,34 @@ describe('progression · progresión por tipo de medición (D16)', () => {
     const s = suggestNext({ lastBest: null, target: { targetDurationSeconds: 45 }, tracking: 'time' });
     expect(s.kind).toBe('plan');
     expect(s.durationSeconds).toBe(45);
+  });
+});
+
+describe('search · normalización y filtrado multi-campo', () => {
+  it('normalizeText pasa a minúsculas, quita acentos y recorta', () => {
+    expect(normalizeText('  Bíceps ')).toBe('biceps');
+    expect(normalizeText('Pájaros')).toBe('pajaros');
+    expect(normalizeText('PRESS Banca')).toBe('press banca');
+    expect(normalizeText(null)).toBe('');
+  });
+
+  it('matchesSearch es insensible a acentos y mayúsculas', () => {
+    expect(matchesSearch('biceps', ['Curl de bíceps'])).toBe(true);
+    expect(matchesSearch('BÍCEPS', ['curl de biceps'])).toBe(true);
+    expect(matchesSearch('pajaro', ['Pájaros (deltoide posterior)'])).toBe(true);
+  });
+
+  it('matchesSearch casa contra cualquiera de los campos (multi-campo)', () => {
+    const fields = ['Press banca con barra', 'pecho', 'barra'];
+    expect(matchesSearch('pecho', fields)).toBe(true);   // por grupo muscular
+    expect(matchesSearch('barra', fields)).toBe(true);   // por equipo
+    expect(matchesSearch('banca', fields)).toBe(true);   // por nombre
+    expect(matchesSearch('polea', fields)).toBe(false);  // no está en ninguno
+  });
+
+  it('término vacío casa siempre (no filtra)', () => {
+    expect(matchesSearch('', ['lo que sea'])).toBe(true);
+    expect(matchesSearch('   ', ['lo que sea'])).toBe(true);
   });
 });
 
