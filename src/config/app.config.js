@@ -85,6 +85,7 @@ export const DEFAULT_SETTINGS = {
   beepLeadSeconds: 10,       // bip a falta de 10s
   trainsAtNight: true,       // el usuario entrena de noche
   inactivityThresholdDays: 4,
+  unit: 'kg',                // unidad de PESO de presentación (kg|lb); se guarda siempre en kg (B11)
   // gymStartDate y planStartDate se fijan al usar la app la primera vez
 };
 

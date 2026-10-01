@@ -9,6 +9,7 @@ import { icon } from '../icons.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
+import { kgToDisplay, unitLabel } from '../../domain/units.js';
 
 /**
  * @param {HTMLElement} root
@@ -18,6 +19,9 @@ import { t } from '../../i18n/index.js';
  */
 export async function renderExerciseHistory(root, app, ex, onBack) {
   clear(root);
+  const settings = await app.repo.getSettings(app.userId);
+  const unit = settings.unit === 'lb' ? 'lb' : 'kg';
+  const u = unitLabel(unit);
   const screen = h('div', { class: 'screen' });
 
   // Cabecera: icono + nombre + título.
@@ -34,7 +38,7 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
   // PR vigente.
   screen.appendChild(h('div', { class: 'card' }, [
     pr
-      ? h('div', { class: 'pr-line' }, t('exh.pr', { reps: pr.repsAtBest, weight: pr.bestWeight, date: formatDate(pr.achievedAt) }))
+      ? h('div', { class: 'pr-line' }, t('exh.pr', { reps: pr.repsAtBest, weight: kgToDisplay(pr.bestWeight, unit), unit: u, date: formatDate(pr.achievedAt) }))
       : h('div', { class: 'muted' }, t('exh.noPR')),
   ]));
 
@@ -44,11 +48,11 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     return;
   }
 
-  // Métricas rápidas.
-  const best1RM = Math.max(...points.map((p) => p.best1RM));
+  // Métricas rápidas. El 1RM se calcula en kg; se muestra en la unidad del usuario.
+  const best1RM = kgToDisplay(Math.max(...points.map((p) => p.best1RM)), unit);
   screen.appendChild(h('div', { class: 'card grid2' }, [
     h('div', { class: 'metric' }, [
-      h('div', { class: 'big', style: 'font-size:22px' }, `${best1RM} kg`),
+      h('div', { class: 'big', style: 'font-size:22px' }, `${best1RM} ${u}`),
       h('div', { class: 'lbl' }, t('exh.best1RM')),
     ]),
     h('div', { class: 'metric' }, [
@@ -57,10 +61,10 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     ]),
   ]));
 
-  // Gráfica de evolución del 1RM (línea SVG).
+  // Gráfica de evolución del 1RM (línea SVG), en la unidad del usuario.
   screen.appendChild(h('div', { class: 'card' }, [
     h('div', { style: 'font-weight:800;margin-bottom:10px' }, t('exh.evolution')),
-    lineChart(points.map((p) => ({ x: p.date, y: p.best1RM }))),
+    lineChart(points.map((p) => ({ x: p.date, y: kgToDisplay(p.best1RM, unit) }))),
     h('div', { class: 'faint', style: 'margin-top:8px' }, t('exh.evolutionHint')),
   ]));
 
@@ -70,9 +74,9 @@ export async function renderExerciseHistory(root, app, ex, onBack) {
     screen.appendChild(h('div', { class: 'card row-between' }, [
       h('div', {}, [
         h('div', { style: 'font-weight:700' }, formatDate(p.date)),
-        h('div', { class: 'muted' }, t('exh.sessionLine', { weight: p.bestWeight, reps: p.bestReps, sets: p.sets })),
+        h('div', { class: 'muted' }, t('exh.sessionLine', { weight: kgToDisplay(p.bestWeight, unit), unit: u, reps: p.bestReps, sets: p.sets })),
       ]),
-      h('div', { class: 'pr-line', style: 'font-weight:800' }, `${p.best1RM} kg`),
+      h('div', { class: 'pr-line', style: 'font-weight:800' }, `${kgToDisplay(p.best1RM, unit)} ${u}`),
     ]));
   }
 

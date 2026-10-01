@@ -64,6 +64,7 @@ Cada requisito tiene un identificador (`RF` funcional, `RNF` no funcional) y la
 | RF-39b | 2 | **Nota por ejercicio** dentro de la sesión (B8): cada ejercicio tiene su propio campo de texto libre (técnica, molestias puntuales…), guardado en `session.exerciseNotes[exerciseId]`. Independiente de la nota global. |
 | RF-40 | 2 | **Series de calentamiento** (B9): una serie se puede marcar como calentamiento/aproximación (🔥). Se registra pero **NO cuenta para el récord (PR), el volumen semanal, el estancamiento, el autorrelleno ni el historial de 1RM**. Sí cuenta como asistencia (una sesión solo de calentamientos avanza la semana efectiva: fuiste al gym). Flag `isWarmup` por serie, campo libre. |
 | RF-41 | 2 | **RIR opcional por serie** (B10): campo de reps en reserva (0 = al fallo, hasta 10), opcional, por serie. Es metadato de esfuerzo percibido: NO afecta al PR ni al volumen. Campo libre `rir` (null si no se indica). Preparado para alimentar una progresión más fina en el futuro. |
+| RF-42 | 2 | **Unidad de peso kg/lb** (B11): el usuario elige en Ajustes si ve los pesos en kilogramos o libras. Los pesos se **almacenan SIEMPRE en kg** (unidad canónica); la unidad es solo de presentación (se convierte al mostrar y al leer la entrada). 1RM, récords y volumen se calculan en kg; cambiar de unidad nunca recalcula ni corrompe el histórico. Helper puro `src/domain/units.js`. |
 
 ### Motivación y notificaciones
 

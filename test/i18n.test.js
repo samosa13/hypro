@@ -14,7 +14,7 @@ describe('i18n', () => {
 
   it('sustituye placeholders', () => {
     expect(t('plan.perWeek', { n: 3 })).toBe('3 días por semana');
-    expect(t('train.prLine', { reps: 10, weight: 40, date: '14 sep 2026' }))
+    expect(t('train.prLine', { reps: 10, weight: 40, unit: 'kg', date: '14 sep 2026' }))
       .toBe('🏆 PR: 10 reps × 40kg (14 sep 2026)');
   });
 

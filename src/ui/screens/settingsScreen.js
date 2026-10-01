@@ -28,6 +28,13 @@ export async function renderSettings(root, app) {
   );
   langSel.value = getLocale();
 
+  // Selector de unidad de peso (B11): kg (canónico) | lb (solo presentación).
+  const unitSel = h('select', {}, [
+    h('option', { value: 'kg' }, t('settings.unitKg')),
+    h('option', { value: 'lb' }, t('settings.unitLb')),
+  ]);
+  unitSel.value = s.unit === 'lb' ? 'lb' : 'kg';
+
   screen.appendChild(h('div', { class: 'card' }, [
     h('label', {}, t('settings.defaultSets')), defaultSets,
     h('label', {}, t('settings.defaultRest')), rest,
@@ -35,6 +42,7 @@ export async function renderSettings(root, app) {
     h('label', {}, t('settings.inactivityDays')), inactivity,
     h('label', {}, t('settings.gymStart')), gymStart,
     h('label', {}, t('settings.language')), langSel,
+    h('label', {}, t('settings.unit')), unitSel,
     h('div', { class: 'row-between', style: 'margin-top:14px' }, [h('span', {}, t('settings.sound')), sound]),
     h('div', { class: 'row-between', style: 'margin-top:10px' }, [h('span', {}, t('settings.night')), night]),
     h('button', {
@@ -50,6 +58,7 @@ export async function renderSettings(root, app) {
           soundEnabled: sound.checked,
           trainsAtNight: night.checked,
           locale: newLocale,
+          unit: unitSel.value === 'lb' ? 'lb' : 'kg',
           // El <input type=date> da "YYYY-MM-DD"; lo interpretamos como fecha
           // LOCAL (no UTC) para que no se desfase un día en husos al oeste (#12).
           gymStartDate: gymStart.value ? localDateToISO(gymStart.value) : s.gymStartDate,

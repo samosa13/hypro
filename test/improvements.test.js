@@ -4,6 +4,46 @@
 import { describe, it, expect } from 'vitest';
 import { suggestNext, weightStep, deriveRepRange, normalizeRepRange } from '../src/domain/progression.js';
 import { volumeByMuscle, volumeRanking } from '../src/domain/volume.js';
+import { kgToDisplay, displayToKg, unitLabel, formatWeight } from '../src/domain/units.js';
+
+describe('units · conversión kg/lb (B11)', () => {
+  it('etiqueta de unidad', () => {
+    expect(unitLabel('kg')).toBe('kg');
+    expect(unitLabel('lb')).toBe('lb');
+    expect(unitLabel(undefined)).toBe('kg');
+  });
+
+  it('kg se muestra tal cual en kg y convertido en lb', () => {
+    expect(kgToDisplay(60, 'kg')).toBe(60);
+    // 60 kg ≈ 132.277 lb → redondeo a 0.5 = 132.5
+    expect(kgToDisplay(60, 'lb')).toBe(132.5);
+  });
+
+  it('entrada del usuario se convierte a kg canónico', () => {
+    expect(displayToKg(60, 'kg')).toBe(60);
+    // 132.5 lb ≈ 60.1 kg
+    expect(displayToKg(132.5, 'lb')).toBeCloseTo(60.1, 1);
+  });
+
+  it('round-trip sin drift grande: kg→lb→kg se mantiene cerca', () => {
+    const kg = 100;
+    const lb = kgToDisplay(kg, 'lb');     // display en lb (redondeado a .5)
+    const back = displayToKg(lb, 'lb');   // de vuelta a kg
+    expect(back).toBeCloseTo(kg, 0);      // within ~0.5 kg por el redondeo de display
+  });
+
+  it('formatWeight incluye la unidad', () => {
+    expect(formatWeight(60, 'kg')).toBe('60 kg');
+    expect(formatWeight(60, 'lb')).toBe('132.5 lb');
+  });
+
+  it('el coach formatea el texto en la unidad elegida pero devuelve weight en kg', () => {
+    const s = suggestNext({ lastBest: { weight: 60, reps: 8 }, repRange: { min: 6, max: 10 }, unit: 'lb' });
+    expect(s.weight).toBe(60);            // el peso devuelto sigue en kg
+    expect(s.text).toContain('lb');       // el texto se muestra en lb
+    expect(s.text).not.toContain('kg');
+  });
+});
 
 describe('progression · sugerencia de progresión', () => {
   it('sin historial sugiere el objetivo del plan', () => {

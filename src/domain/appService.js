@@ -449,11 +449,14 @@ export function createAppService(repo = repository, userId = APP.defaultUserId) 
         planExercise?.repMin > 0 && planExercise?.repMax > 0
           ? { min: planExercise.repMin, max: planExercise.repMax }
           : deriveRepRange(planExercise?.targetReps);
+      // Unidad de presentación del usuario (B11): el texto del coach se muestra en ella.
+      const settings = await repo.getSettings(userId);
       return suggestNext({
         lastBest: last ? { weight: last.weight, reps: last.reps } : null,
         target: { targetReps: planExercise?.targetReps, targetWeight: planExercise?.targetWeight },
         repRange,
         equipment: exercise.equipment,
+        unit: settings.unit === 'lb' ? 'lb' : 'kg',
       });
     },
 

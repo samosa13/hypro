@@ -12,6 +12,7 @@
  * No mangonea: es una SUGERENCIA basada en lo que hiciste la última vez. El
  * usuario decide. Si no hay historial, sugiere el objetivo del plan.
  */
+import { kgToDisplay } from './units.js';
 
 /**
  * Deriva un rango de reps [min, max] a partir de un objetivo puntual (targetReps).
@@ -71,9 +72,13 @@ function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 12 }, equipment = '' } = {}) {
+export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 12 }, equipment = '', unit = 'kg' } = {}) {
   const max = repRange.max ?? 12;
   const min = repRange.min ?? 8;
+  // Peso en texto, en la unidad del usuario (B11). El cálculo sigue en kg; solo
+  // el texto mostrado se convierte. `weight` devuelto se mantiene en kg.
+  const u = unit === 'lb' ? 'lb' : 'kg';
+  const wTxt = (kg) => `${kgToDisplay(kg, u)} ${u}`;
 
   // Sin historial: proponer el objetivo del plan, pero ACOTADO al rango. Si el
   // plan traía un targetReps fuera del rango (dato antiguo sin curar, p.ej. 12
@@ -81,7 +86,7 @@ export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 1
   if (!lastBest || !(lastBest.weight > 0) || !(lastBest.reps > 0)) {
     const w = target.targetWeight ?? 0;
     const r = clamp(target.targetReps ?? min, min, max);
-    return { weight: w, reps: r, kind: 'plan', text: `Objetivo: ${r} reps × ${w} kg` };
+    return { weight: w, reps: r, kind: 'plan', text: `Objetivo: ${r} reps × ${wTxt(w)}` };
   }
 
   // Con historial: doble progresión.
@@ -91,7 +96,7 @@ export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 1
       weight: lastBest.weight,
       reps,
       kind: 'reps',
-      text: `Hoy intenta ${reps} reps × ${lastBest.weight} kg`,
+      text: `Hoy intenta ${reps} reps × ${wTxt(lastBest.weight)}`,
     };
   }
   // Tope de reps alcanzado -> subir peso y reiniciar reps al mínimo.
@@ -100,6 +105,6 @@ export function suggestNext({ lastBest, target = {}, repRange = { min: 8, max: 1
     weight,
     reps: min,
     kind: 'weight',
-    text: `¡Sube peso! Prueba ${min} reps × ${weight} kg`,
+    text: `¡Sube peso! Prueba ${min} reps × ${wTxt(weight)}`,
   };
 }

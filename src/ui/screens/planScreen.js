@@ -8,6 +8,7 @@ import { pushLayer, popLayer } from '../nav.js';
 import { t } from '../../i18n/index.js';
 import { deriveRepRange, normalizeRepRange } from '../../domain/progression.js';
 import { MUSCLE_GROUPS } from '../../data/seedExercises.js';
+import { kgToDisplay, displayToKg, unitLabel } from '../../domain/units.js';
 
 /** Texto del rango de reps de un plan-ejercicio: "6-8" o "8" si min==max. */
 function repRangeLabel(pe) {
@@ -166,7 +167,7 @@ async function openEditDay(root, app, plan, day) {
           h('div', { class: 'ex-icon', html: icon(ex.icon) }),
           h('div', {}, [
             h('div', { style: 'font-weight:700' }, ex.name),
-            h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: repRangeLabel(pe), weight: pe.targetWeight, rest: pe.restSeconds })),
+            h('div', { class: 'muted' }, t('plan.exerciseMeta', { sets: pe.targetSets, reps: repRangeLabel(pe), weight: kgToDisplay(pe.targetWeight, settings.unit), unit: unitLabel(settings.unit), rest: pe.restSeconds })),
           ]),
         ]),
         h('div', { class: 'row', style: 'gap:4px' }, [
@@ -194,7 +195,10 @@ async function openEditDay(root, app, plan, day) {
   const sets = h('input', { type: 'number', min: '1', value: String(settings.defaultSets) });
   const repMin = h('input', { type: 'number', min: '1', value: '8' });
   const repMax = h('input', { type: 'number', min: '1', value: '12' });
-  const weight = h('input', { type: 'number', min: '0', step: '0.5', value: '20' });
+  // Peso por defecto 20 kg, mostrado en la unidad del usuario (B11). Step acorde
+  // a la unidad (2.5 lb / 0.5 kg) para que las flechas encajen con discos reales.
+  const weightStepAttr = settings.unit === 'lb' ? '2.5' : '0.5';
+  const weight = h('input', { type: 'number', min: '0', step: weightStepAttr, value: String(kgToDisplay(20, settings.unit)) });
   const rest = h('input', { type: 'number', min: '0', value: String(settings.defaultRestSeconds) });
 
   const search = h('input', { type: 'search', placeholder: t('plan.searchExercise') });
@@ -222,7 +226,7 @@ async function openEditDay(root, app, plan, day) {
     ]));
     configWrap.appendChild(h('div', { class: 'grid2', style: 'margin-top:8px' }, [
       h('div', {}, [h('label', {}, t('plan.sets')), sets]),
-      h('div', {}, [h('label', {}, t('plan.weightKg')), weight]),
+      h('div', {}, [h('label', {}, t('plan.weightKg', { unit: unitLabel(settings.unit) })), weight]),
     ]));
     configWrap.appendChild(h('label', { style: 'margin-top:8px' }, t('plan.repRange')));
     configWrap.appendChild(h('div', { class: 'grid2' }, [
@@ -280,14 +284,15 @@ async function openEditDay(root, app, plan, day) {
       repMin: range.min,
       repMax: range.max,
       targetReps: Math.round((range.min + range.max) / 2),
-      targetWeight: parseFloat(weight.value) || 0,
+      // El peso se introduce en la unidad del usuario pero se guarda en kg (B11).
+      targetWeight: displayToKg(parseFloat(weight.value) || 0, settings.unit),
       restSeconds: parseInt(rest.value) || settings.defaultRestSeconds,
     });
     // Reset del selector para poder añadir otro, restaurando valores por defecto.
     pick.exerciseId = '';
     sets.value = String(settings.defaultSets);
     repMin.value = '8'; repMax.value = '12';
-    weight.value = '20'; rest.value = String(settings.defaultRestSeconds);
+    weight.value = String(kgToDisplay(20, settings.unit)); rest.value = String(settings.defaultRestSeconds);
     renderConfig();
     paintPicker();
     paintExercises();

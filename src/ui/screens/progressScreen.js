@@ -9,6 +9,7 @@ import { positionLabel } from '../../domain/effectiveWeek.js';
 import { currentStreak } from '../../domain/streak.js';
 import { formatDate } from '../../domain/dateKey.js';
 import { t } from '../../i18n/index.js';
+import { kgToDisplay, unitLabel } from '../../domain/units.js';
 
 export async function renderProgress(root, app) {
   clear(root);
@@ -128,7 +129,7 @@ export async function renderProgress(root, app) {
         h('div', { class: 'ex-icon', html: icon(ex?.icon ?? 'bodyweight') }),
         h('div', {}, [
           h('div', { style: 'font-weight:700' }, ex?.name ?? 'Ejercicio'),
-          h('div', { class: 'pr-line' }, `${pr.repsAtBest} reps × ${pr.bestWeight}kg`),
+          h('div', { class: 'pr-line' }, `${pr.repsAtBest} reps × ${kgToDisplay(pr.bestWeight, settings.unit)}${unitLabel(settings.unit)}`),
           h('div', { class: 'faint' }, formatDate(pr.achievedAt)),
         ]),
       ]));
