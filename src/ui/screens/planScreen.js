@@ -241,7 +241,11 @@ async function openEditDay(root, app, plan, day) {
         class: 'btn btn-ghost btn-xs', title: t('plan.moveDown'), disabled: isLast,
         onClick: async () => { await app.repo.movePlanExercise(day.id, pe.id, +1); paintExercises(); },
       }, '↓');
-      // Agrupar con el siguiente (D17) / desagrupar.
+      // Agrupar (D17) / desagrupar. Si ya está en grupo → desagrupar. Si no:
+      // los que tienen un SIGUIENTE agrupan con el siguiente; el ÚLTIMO (que no
+      // tiene siguiente) agrupa con el ANTERIOR, para que también pueda entrar
+      // en una superserie/triserie (antes el último se quedaba sin opción).
+      const prev = items[idx - 1];
       const groupBtns = [];
       if (pe.groupId) {
         groupBtns.push(h('button', {
@@ -252,6 +256,13 @@ async function openEditDay(root, app, plan, day) {
         groupBtns.push(h('button', {
           class: 'btn btn-ghost btn-xs', title: t('plan.groupWithNext'),
           onClick: async () => { await app.repo.groupWithNext(day.id, pe.id); paintExercises(); },
+        }, '🔗'));
+      } else if (prev) {
+        // Último ejercicio: agruparlo con el anterior (reutiliza groupWithNext
+        // desde el anterior, que ya encadena a su grupo si lo tiene).
+        groupBtns.push(h('button', {
+          class: 'btn btn-ghost btn-xs', title: t('plan.groupWithPrev'),
+          onClick: async () => { await app.repo.groupWithNext(day.id, prev.id); paintExercises(); },
         }, '🔗'));
       }
       const delBtn = h('button', {

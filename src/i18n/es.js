@@ -139,6 +139,7 @@ export default {
   'plan.moveUp': 'Subir',
   'plan.moveDown': 'Bajar',
   'plan.groupWithNext': 'Agrupar con el siguiente (superserie)',
+  'plan.groupWithPrev': 'Agrupar con el anterior (superserie)',
   'plan.ungroup': 'Deshacer grupo',
   'plan.sets': 'Series',
   'plan.targetReps': 'Reps objetivo',

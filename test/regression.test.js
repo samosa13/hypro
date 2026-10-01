@@ -937,6 +937,36 @@ describe('REGRESIÓN · flujo completo de entrenamiento', () => {
     expect(items.every((pe) => pe.groupType === 'triset')).toBe(true);
   });
 
+  it('el ÚLTIMO ejercicio se puede agrupar con el anterior (triserie de 3 abdominales)', async () => {
+    // Caso del usuario: 3 ejercicios seguidos, quiero triserie. El botón del
+    // último agrupa con el anterior = groupWithNext sobre el anterior.
+    const { day } = await setupDayWith3();
+    let items = await repository.listPlanExercises(day.id);
+    // Agrupar 1+2 (botón del primero), luego el ÚLTIMO (3º) con el anterior (2º).
+    await repository.groupWithNext(day.id, items[0].id);        // 1+2
+    items = await repository.listPlanExercises(day.id);
+    const lastIdx = items.length - 1;
+    await repository.groupWithNext(day.id, items[lastIdx - 1].id); // último con su anterior
+    items = await repository.listPlanExercises(day.id);
+    const gid = items[0].groupId;
+    expect(items.length).toBe(3);
+    expect(items.every((pe) => pe.groupId === gid)).toBe(true); // los 3 en el mismo grupo
+    expect(items.every((pe) => pe.groupType === 'triset')).toBe(true);
+  });
+
+  it('dos ejercicios: el último (segundo) se puede agrupar con el primero → superserie', async () => {
+    const { day } = await setupDayWith3();
+    // Dejar solo 2 ejercicios para probar el caso mínimo (el 2º es el último).
+    let items = await repository.listPlanExercises(day.id);
+    await repository.deletePlanExercise(items[2].id);
+    items = await repository.listPlanExercises(day.id);
+    expect(items.length).toBe(2);
+    // Agrupar el último (2º) con el anterior (1º).
+    await repository.groupWithNext(day.id, items[0].id);
+    items = await repository.listPlanExercises(day.id);
+    expect(items.every((pe) => pe.groupId && pe.groupType === 'superset')).toBe(true);
+  });
+
   it('ungroup deshace el grupo dejando a los miembros sin groupId', async () => {
     const { day } = await setupDayWith3();
     let items = await repository.listPlanExercises(day.id);
