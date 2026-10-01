@@ -31,6 +31,7 @@ export default {
   'nav.plan': 'Plan',
   'nav.exercises': 'Ejercicios',
   'nav.progress': 'Progreso',
+  'nav.calendar': 'Calendario',
   'nav.settings': 'Ajustes',
 
   // --- Entrenar ---
@@ -93,6 +94,35 @@ export default {
   'train.group.triset': '🔗 Triserie',
   'train.group.circuit': '🔗 Circuito',
   'train.group.round': 'Vuelta {n}',
+
+  // --- Calendario (registro de sesiones pasadas) ---
+  'calendar.title': 'Calendario',
+  'calendar.subtitle': 'Toca un día para ver o registrar un entreno.',
+  'calendar.needPlan': 'Crea tu plan primero (pestaña Plan) para registrar entrenos.',
+  'calendar.prevMonth': 'Mes anterior',
+  'calendar.nextMonth': 'Mes siguiente',
+  'calendar.weekdayMon': 'L',
+  'calendar.weekdayTue': 'M',
+  'calendar.weekdayWed': 'X',
+  'calendar.weekdayThu': 'J',
+  'calendar.weekdayFri': 'V',
+  'calendar.weekdaySat': 'S',
+  'calendar.weekdaySun': 'D',
+  'calendar.legendTrained': 'Entrenado',
+  'calendar.legendToday': 'Hoy',
+  'calendar.futureBlocked': 'No puedes registrar entrenos a futuro.',
+  'calendar.sessionTitle': 'Entreno del {date}',
+  'calendar.sessionSets': '{n} series',
+  'calendar.noSession': 'Sin entreno este día.',
+  'calendar.logHere': '➕ Registrar entreno de este día',
+  'calendar.logTitle': 'Registrar entreno · {date}',
+  'calendar.chooseDay': '¿Qué día del plan hiciste?',
+  'calendar.addSet': '➕ Añadir serie',
+  'calendar.removeSet': 'Quitar serie',
+  'calendar.save': 'Guardar entreno',
+  'calendar.needOneSet': 'Añade al menos una serie válida.',
+  'calendar.saved': 'Entreno registrado el {date}.',
+  'calendar.dayNoExercises': 'Este día del plan no tiene ejercicios. Añádelos en Plan.',
 
   // --- Plan ---
   'plan.title': 'Mi plan',

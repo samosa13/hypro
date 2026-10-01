@@ -19,6 +19,7 @@ import { renderPlan } from './ui/screens/planScreen.js';
 import { renderWelcome } from './ui/screens/welcomeScreen.js';
 import { renderExercises } from './ui/screens/exercisesScreen.js';
 import { renderProgress } from './ui/screens/progressScreen.js';
+import { renderCalendar } from './ui/screens/calendarScreen.js';
 import { renderSettings } from './ui/screens/settingsScreen.js';
 
 applyTheme();
@@ -33,6 +34,7 @@ const TABS = [
   { id: 'plan', labelKey: 'nav.plan', icon: 'ex_sentadilla', render: renderPlan },
   { id: 'exercises', labelKey: 'nav.exercises', icon: 'ex_curl_db', render: renderExercises },
   { id: 'progress', labelKey: 'nav.progress', icon: 'ex_dominadas', render: renderProgress },
+  { id: 'calendar', labelKey: 'nav.calendar', icon: 'ex_crunch', render: renderCalendar },
   { id: 'settings', labelKey: 'nav.settings', icon: 'ex_press_maquina', render: renderSettings },
 ];
 
