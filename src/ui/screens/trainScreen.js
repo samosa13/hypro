@@ -435,12 +435,14 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   // Incremento del spinner acorde a la unidad: discos de gimnasio van de 2.5 en
   // 2.5 lb / 1.25 en kg aprox; usamos 2.5 (lb) y 0.5 (kg) como pasos cómodos.
   const weightStepAttr = unit === 'lb' ? '2.5' : '0.5';
-  const weight = h('input', { type: 'number', min: '0', step: weightStepAttr, value: String(prefillWeight ?? 0), style: 'width:80px' });
-  const reps = h('input', { type: 'number', min: '0', value: String(prefillReps ?? 0), style: 'width:70px' });
+  // Etiquetas de unidad como placeholder (ahorra espacio → una sola línea en móvil).
+  // Sin anchos inline: el ancho lo reparte el flex de .set-row input (styles.css).
+  const weight = h('input', { type: 'number', min: '0', step: weightStepAttr, placeholder: unitLabel(unit), value: String(prefillWeight ?? 0) });
+  const reps = h('input', { type: 'number', min: '0', placeholder: 'reps', value: String(prefillReps ?? 0) });
   // Input de duración en segundos para ejercicios de tiempo (D16).
-  const duration = h('input', { type: 'number', min: '0', step: '1', value: String(prefillDuration ?? 0), class: 'dur-input', style: 'width:72px' });
+  const duration = h('input', { type: 'number', min: '0', step: '1', placeholder: t('train.seconds'), value: String(prefillDuration ?? 0), class: 'dur-input' });
   // RIR opcional (B10): reps en reserva (0 = al fallo). Vacío = sin dato.
-  const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', title: t('train.rirHint'), class: 'rir-input', style: 'width:58px' });
+  const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', title: t('train.rirHint'), class: 'rir-input' });
   const row = h('div', { class: 'set-row' });
 
   // Id de la serie una vez persistida (A1): habilita editar/borrar.
@@ -461,22 +463,18 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const editBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.editSet'), style: 'display:none', onClick: edit }, '✎');
   const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.deleteSet'), style: 'display:none', onClick: remove }, '🗑');
 
-  // Zona de campos: pares input+unidad agrupados en .field para que envuelvan
-  // juntos (nunca se separa "68" de "kg") sin empujar las acciones.
+  // Zona de campos en UNA línea: nº + inputs (la unidad va como placeholder).
   const fields = h('div', { class: 'set-fields' });
   fields.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   // Campos según el tipo de medición (D16):
   if (isTime) {
     // Solo duración (segundos). Sin peso ni reps.
-    fields.appendChild(h('div', { class: 'field' }, [duration, h('span', { class: 'unit muted' }, t('train.seconds'))]));
+    fields.appendChild(duration);
   } else {
-    if (!isRepsOnly) {
-      // Peso solo en ejercicios de peso+reps.
-      fields.appendChild(h('div', { class: 'field' }, [weight, h('span', { class: 'unit muted' }, unitLabel(unit))]));
-    }
-    fields.appendChild(h('div', { class: 'field' }, [reps, h('span', { class: 'unit muted' }, 'reps')]));
+    if (!isRepsOnly) fields.appendChild(weight); // peso solo en peso+reps
+    fields.appendChild(reps);
   }
-  fields.appendChild(h('div', { class: 'field' }, [rir]));
+  fields.appendChild(rir);
   row.appendChild(fields);
   // Acciones ancladas a la derecha en un sitio fijo (no dependen de la longitud
   // de la fila ni se solapan): ver .set-actions en styles.css.

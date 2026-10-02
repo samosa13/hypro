@@ -321,10 +321,11 @@ function buildSetRow(ex, pe, setNumber, unit) {
   const isTime = tracking === 'time';
   const weightStep = unit === 'lb' ? '2.5' : '0.5';
 
-  const weight = h('input', { type: 'number', min: '0', step: weightStep, value: String(kgToDisplay(pe.targetWeight ?? 0, unit) || 0), style: 'width:80px' });
-  const reps = h('input', { type: 'number', min: '0', value: String(pe.targetReps ?? 0), style: 'width:70px' });
-  const duration = h('input', { type: 'number', min: '0', step: '1', value: String(pe.targetDurationSeconds ?? 0), style: 'width:72px' });
-  const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', class: 'rir-input', style: 'width:58px' });
+  // Etiquetas de unidad como placeholder (ahorra espacio → cabe en una línea en móvil).
+  const weight = h('input', { type: 'number', min: '0', step: weightStep, placeholder: unitLabel(unit), value: String(kgToDisplay(pe.targetWeight ?? 0, unit) || 0) });
+  const reps = h('input', { type: 'number', min: '0', placeholder: 'reps', value: String(pe.targetReps ?? 0) });
+  const duration = h('input', { type: 'number', min: '0', step: '1', placeholder: t('train.seconds'), value: String(pe.targetDurationSeconds ?? 0) });
+  const rir = h('input', { type: 'number', min: '0', max: '10', placeholder: 'RIR', class: 'rir-input' });
 
   let isWarmup = false;
   const warmBtn = h('button', { class: 'btn btn-ghost btn-sm warm-toggle', title: t('train.warmup'), onClick: () => {
@@ -335,22 +336,21 @@ function buildSetRow(ex, pe, setNumber, unit) {
   // Quitar la fila (no cuenta al guardar). No elimina nada persistido: aún no lo está.
   const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('calendar.removeSet'), onClick: () => { el.remove(); removed = true; } }, '🗑');
 
-  // Zona de campos: pares input+unidad agrupados en .field para que envuelvan
-  // juntos (nunca se separa "68" de "kg") sin empujar las acciones.
+  // Zona de campos en UNA línea: nº + inputs (la unidad va como placeholder).
   const fields = h('div', { class: 'set-fields' });
   fields.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   if (isTime) {
-    fields.appendChild(h('div', { class: 'field' }, [duration, h('span', { class: 'unit muted' }, t('train.seconds'))]));
+    fields.appendChild(duration);
   } else {
-    if (!isRepsOnly) { fields.appendChild(h('div', { class: 'field' }, [weight, h('span', { class: 'unit muted' }, unitLabel(unit))])); }
-    fields.appendChild(h('div', { class: 'field' }, [reps, h('span', { class: 'unit muted' }, 'reps')]));
+    if (!isRepsOnly) fields.appendChild(weight);
+    fields.appendChild(reps);
   }
-  fields.appendChild(h('div', { class: 'field' }, [rir]));
+  fields.appendChild(rir);
 
   const el = h('div', { class: 'set-row' });
   el.appendChild(fields);
-  // Acciones ancladas a la derecha en un sitio fijo (no dependen de la longitud
-  // de la fila ni se solapan): ver .set-actions en styles.css.
+  // Acciones ancladas a la derecha en un sitio fijo (ancho fijo, no se encogen):
+  // ver .set-actions en styles.css.
   el.appendChild(h('div', { class: 'set-actions' }, [warmBtn, delBtn]));
 
   let removed = false;
