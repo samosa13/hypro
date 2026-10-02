@@ -184,15 +184,43 @@ label { font-size: 13px; color: var(--color-text-muted); font-weight: 600; displ
 .tabbar .ico { width: 24px; height: 24px; }
 
 /* ---------- Serie / logging ---------- */
-.set-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--color-border-soft, #22222c); }
+.set-row {
+  /* La fila tiene DOS zonas: los campos (.set-fields, pueden envolver internamente)
+     y las acciones (.set-actions, ancladas SIEMPRE a la derecha en un sitio fijo).
+     Así los botones (🔥/⟲/✓/✎/🗑) quedan en el mismo lugar sea cual sea la longitud
+     de la fila y nunca se solapan ni se salen del frame. */
+  display: flex; align-items: center; gap: 8px; padding: 11px 0;
+  border-bottom: 1px solid var(--color-border-soft, #22222c);
+}
 .set-row:last-child { border-bottom: none; }
+/* Zona de campos: nº + pares (input+etiqueta). Se encoge y, si hace falta, envuelve
+   dentro de sí misma por PARES (nunca separa "68" de "kg") sin empujar a las acciones. */
+.set-row .set-fields {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px;
+  flex: 1 1 auto; min-width: 0;
+}
+/* Par input+unidad: se mantienen juntos y envuelven como un bloque. */
+.set-row .field { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .set-row .setno {
   width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px;
   display: grid; place-items: center;
   font-family: var(--font-display); font-size: 17px; font-weight: 700;
   background: var(--color-surface-alt); color: var(--color-text-muted);
 }
-.set-row input { font-family: var(--font-display); font-size: 20px; font-weight: 700; text-align: center; padding: 8px; }
+.set-row input {
+  font-family: var(--font-display); font-size: 20px; font-weight: 700;
+  text-align: center; padding: 8px 6px;
+  min-width: 0; flex: 0 1 68px; max-width: 72px;
+}
+.set-row .rir-input { flex: 0 1 52px; max-width: 52px; }
+.set-row .unit { flex: 0 0 auto; }
+/* Zona de acciones: SIEMPRE pegada a la derecha y en un sitio fijo. */
+.set-row .set-actions {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: auto; flex: 0 0 auto;
+}
+/* Botones de acción compactos y de ancho uniforme (icono centrado). */
+.set-row .set-actions .btn-sm { padding: 8px; min-width: 38px; }
 .set-row.done { opacity: .5; }
 .set-row.done .setno { background: var(--color-success-dim, rgba(49,209,88,.14)); color: var(--color-success); }
 .set-row.pr .setno { background: var(--color-accent-dim, rgba(255,106,0,.12)); color: var(--color-pr); }

@@ -335,17 +335,23 @@ function buildSetRow(ex, pe, setNumber, unit) {
   // Quitar la fila (no cuenta al guardar). No elimina nada persistido: aún no lo está.
   const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('calendar.removeSet'), onClick: () => { el.remove(); removed = true; } }, '🗑');
 
-  const el = h('div', { class: 'set-row' });
-  el.appendChild(h('div', { class: 'setno' }, String(setNumber)));
+  // Zona de campos: pares input+unidad agrupados en .field para que envuelvan
+  // juntos (nunca se separa "68" de "kg") sin empujar las acciones.
+  const fields = h('div', { class: 'set-fields' });
+  fields.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   if (isTime) {
-    el.appendChild(duration); el.appendChild(h('span', { class: 'unit muted' }, t('train.seconds')));
+    fields.appendChild(h('div', { class: 'field' }, [duration, h('span', { class: 'unit muted' }, t('train.seconds'))]));
   } else {
-    if (!isRepsOnly) { el.appendChild(weight); el.appendChild(h('span', { class: 'unit muted' }, unitLabel(unit))); }
-    el.appendChild(reps); el.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+    if (!isRepsOnly) { fields.appendChild(h('div', { class: 'field' }, [weight, h('span', { class: 'unit muted' }, unitLabel(unit))])); }
+    fields.appendChild(h('div', { class: 'field' }, [reps, h('span', { class: 'unit muted' }, 'reps')]));
   }
-  el.appendChild(rir);
-  el.appendChild(warmBtn);
-  el.appendChild(delBtn);
+  fields.appendChild(h('div', { class: 'field' }, [rir]));
+
+  const el = h('div', { class: 'set-row' });
+  el.appendChild(fields);
+  // Acciones ancladas a la derecha en un sitio fijo (no dependen de la longitud
+  // de la fila ni se solapan): ver .set-actions en styles.css.
+  el.appendChild(h('div', { class: 'set-actions' }, [warmBtn, delBtn]));
 
   let removed = false;
   function parseRir() {

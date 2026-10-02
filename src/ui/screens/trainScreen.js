@@ -461,24 +461,26 @@ function setRow(app, ctx, pe, ex, setNumber, opts) {
   const editBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.editSet'), style: 'display:none', onClick: edit }, '✎');
   const delBtn = h('button', { class: 'btn btn-ghost btn-sm', title: t('train.deleteSet'), style: 'display:none', onClick: remove }, '🗑');
 
-  row.appendChild(h('div', { class: 'setno' }, String(setNumber)));
+  // Zona de campos: pares input+unidad agrupados en .field para que envuelvan
+  // juntos (nunca se separa "68" de "kg") sin empujar las acciones.
+  const fields = h('div', { class: 'set-fields' });
+  fields.appendChild(h('div', { class: 'setno' }, String(setNumber)));
   // Campos según el tipo de medición (D16):
   if (isTime) {
     // Solo duración (segundos). Sin peso ni reps.
-    row.appendChild(duration); row.appendChild(h('span', { class: 'unit muted' }, t('train.seconds')));
+    fields.appendChild(h('div', { class: 'field' }, [duration, h('span', { class: 'unit muted' }, t('train.seconds'))]));
   } else {
     if (!isRepsOnly) {
       // Peso solo en ejercicios de peso+reps.
-      row.appendChild(weight); row.appendChild(h('span', { class: 'unit muted' }, unitLabel(unit)));
+      fields.appendChild(h('div', { class: 'field' }, [weight, h('span', { class: 'unit muted' }, unitLabel(unit))]));
     }
-    row.appendChild(reps); row.appendChild(h('span', { class: 'unit muted' }, 'reps'));
+    fields.appendChild(h('div', { class: 'field' }, [reps, h('span', { class: 'unit muted' }, 'reps')]));
   }
-  row.appendChild(rir);
-  row.appendChild(warmBtn);
-  row.appendChild(repeatBtn);
-  row.appendChild(doneBtn);
-  row.appendChild(editBtn);
-  row.appendChild(delBtn);
+  fields.appendChild(h('div', { class: 'field' }, [rir]));
+  row.appendChild(fields);
+  // Acciones ancladas a la derecha en un sitio fijo (no dependen de la longitud
+  // de la fila ni se solapan): ver .set-actions en styles.css.
+  row.appendChild(h('div', { class: 'set-actions' }, [warmBtn, repeatBtn, doneBtn, editBtn, delBtn]));
 
   /** Alterna el flag de calentamiento (antes o después de confirmar). */
   async function toggleWarmup() {
